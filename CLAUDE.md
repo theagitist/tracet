@@ -52,7 +52,9 @@ or `node` are on PATH.** Use the full binary path:
   - `diarize.rs`: currently a stub (whisperX handles diarization inline)
   - `review.rs`: Ollama LLM coherence review (graceful fallback when
     Ollama isn't reachable)
-  - `export.rs`: `.txt` / `.md` formatting
+  - `export.rs`: `.txt` / `.md` / `.ai.md` formatting (the AI-friendly
+    variant has fixed structure: YAML frontmatter, numbered segments,
+    inline strikethrough for very-low-confidence words)
   - `project.rs`: `save_project` / `load_project` for `.tracet` bundles
   - `setup.rs`: first-run dependency installer (FFmpeg, venv)
   - `hardware.rs`: chip / RAM detection, model profile filtering
@@ -94,7 +96,7 @@ or `node` are on PATH.** Use the full binary path:
    with int8 quantisation. Alignment and diarization can use MPS.
 4. **whisperX on first run downloads several GB.** Models cached at
    `~/.cache/huggingface/hub/` and `~/.cache/torch/hub/checkpoints/`.
-   `large-v3-turbo` is the default: best speed/quality tradeoff.
+   `large-v3-turbo` is the default and offers the best speed/quality tradeoff.
 5. **The fs plugin's path scope is unreliable for `/var/folders/...`** on
    macOS. Use the custom `read_audio_file` Tauri command for any reads
    from temp dirs, not `@tauri-apps/plugin-fs`.
@@ -117,7 +119,7 @@ The pipeline emits `pipeline:progress` events shaped like:
 ```
 
 `percent === 0` is a sentinel meaning "keep current percent, just update
-the message": used when forwarding library log lines whose granularity
+the message". It is used when forwarding library log lines whose granularity
 is unknown. The frontend shows an indeterminate animated bar whenever
 the message contains `"(Xs elapsed"` (heartbeat is active).
 
@@ -156,7 +158,7 @@ immediately without an app restart.
 - Avoid comments that just restate the code; comment the *why* when
   non-obvious (the gotchas above are exactly the cases worth commenting).
 - Prefer editing existing files over creating new ones.
-- Don't mock at module boundaries that aren't currently tested: most of
+- Don't mock at module boundaries that aren't currently tested. Most of
   this app is integration-tested by hand.
 
 ## License

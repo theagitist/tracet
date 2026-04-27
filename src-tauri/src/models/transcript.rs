@@ -102,6 +102,11 @@ pub struct ExportOptions {
 pub enum ExportFormat {
     Txt,
     Md,
+    /// AI-friendly markdown: YAML frontmatter with structured metadata,
+    /// numbered segments, inline strikethrough for very-low-confidence words,
+    /// flagged-segment blockquotes. Designed for handing the transcript off
+    /// to an LLM without committing to a specific downstream task.
+    AiMd,
 }
 
 impl Default for ExportOptions {

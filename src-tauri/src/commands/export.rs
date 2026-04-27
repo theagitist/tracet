@@ -2,12 +2,13 @@ use crate::models::transcript::{
     ExportFormat, ExportOptions, SegmentType, Transcript, TranscriptSegment,
 };
 
-/// Export a transcript to a formatted string (txt or md).
+/// Export a transcript to a formatted string.
 #[tauri::command]
 pub fn export_transcript(transcript: Transcript, options: ExportOptions) -> Result<String, String> {
     match options.format {
         ExportFormat::Md => Ok(export_markdown(&transcript, &options)),
         ExportFormat::Txt => Ok(export_plaintext(&transcript, &options)),
+        ExportFormat::AiMd => Ok(export_ai_markdown(&transcript)),
     }
 }
 
@@ -157,6 +158,213 @@ fn export_plaintext(transcript: &Transcript, options: &ExportOptions) -> String 
         }
 
         output.push_str(&format!("{}\n", line));
+    }
+
+    output
+}
+
+// =============================================================================
+// AI-friendly markdown export
+// =============================================================================
+
+/// Show segment confidence inline only when below this threshold (as a percent).
+/// Above this, "good enough" is implied and we save tokens by omitting it.
+const AI_CONFIDENCE_DISPLAY_BELOW: u8 = 85;
+
+/// Mark individual words as `~~struck-through~~` when their alignment score
+/// is below this threshold. Matches the UI's red-dashed-underline tier.
+const AI_WORD_STRIKETHROUGH_BELOW: f32 = 0.30;
+
+/// Format a timestamp as `MM:SS.mmm` or `HH:MM:SS.mmm`.
+fn format_timestamp_ms(ms: u64) -> String {
+    let total_secs = ms / 1000;
+    let millis = ms % 1000;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    if hours > 0 {
+        format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
+    } else {
+        format!("{:02}:{:02}.{:03}", minutes, seconds, millis)
+    }
+}
+
+fn format_duration_human(ms: u64) -> String {
+    let total_secs = ms / 1000;
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    if hours > 0 {
+        format!("{}h {}m {}s", hours, minutes, seconds)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, seconds)
+    } else {
+        format!("{}s", seconds)
+    }
+}
+
+/// YAML scalars that contain `:` `#` quotes etc. need quoting. We do it
+/// conservatively (always quote when in doubt) since these strings come
+/// from arbitrary filenames and user-typed speaker names.
+fn yaml_string(s: &str) -> String {
+    let needs_quotes = s.is_empty()
+        || s.contains([':', '#', '"', '\'', '\n', '\r', '\t', '`'])
+        || s.starts_with(['-', '?', '!', '|', '>', '%', '@', '&', '*', '['])
+        || s.starts_with(' ')
+        || s.ends_with(' ');
+    if !needs_quotes {
+        return s.to_string();
+    }
+    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{}\"", escaped)
+}
+
+/// Render the segment text with `~~strikethrough~~` around very-low-confidence words.
+fn render_text_with_strikethrough(segment: &TranscriptSegment) -> String {
+    if segment.token_confidences.is_empty() {
+        return segment.text.clone();
+    }
+
+    let mut result = String::with_capacity(segment.text.len() + 32);
+    let mut remaining: &str = &segment.text;
+
+    for tc in &segment.token_confidences {
+        if tc.token.is_empty() {
+            continue;
+        }
+        if let Some(idx) = remaining.find(tc.token.as_str()) {
+            result.push_str(&remaining[..idx]);
+            if tc.confidence < AI_WORD_STRIKETHROUGH_BELOW {
+                result.push_str("~~");
+                result.push_str(&tc.token);
+                result.push_str("~~");
+            } else {
+                result.push_str(&tc.token);
+            }
+            remaining = &remaining[idx + tc.token.len()..];
+        }
+    }
+    result.push_str(remaining);
+    result
+}
+
+fn export_ai_markdown(transcript: &Transcript) -> String {
+    let speech_segments: Vec<&TranscriptSegment> = transcript
+        .segments
+        .iter()
+        .filter(|s| s.segment_type == SegmentType::Speech)
+        .collect();
+    let flagged_count = speech_segments.iter().filter(|s| s.is_flagged).count();
+
+    let mut output = String::new();
+
+    // ---------- YAML frontmatter ----------
+    output.push_str("---\n");
+    output.push_str("format: tracet-transcript\n");
+    output.push_str("version: 1\n");
+    output.push_str(&format!(
+        "source: {}\n",
+        yaml_string(&transcript.source_file)
+    ));
+    output.push_str(&format!("duration_ms: {}\n", transcript.duration_ms));
+    output.push_str(&format!(
+        "duration_human: {}\n",
+        yaml_string(&format_duration_human(transcript.duration_ms))
+    ));
+    output.push_str(&format!(
+        "exported_at: {}\n",
+        yaml_string(&chrono::Utc::now().to_rfc3339())
+    ));
+
+    if !transcript.speakers.is_empty() {
+        output.push_str("speakers:\n");
+        for sp in &transcript.speakers {
+            let name = sp.name.as_deref().unwrap_or(sp.id.as_str());
+            output.push_str(&format!(
+                "  - {{ id: {}, name: {} }}\n",
+                yaml_string(&sp.id),
+                yaml_string(name)
+            ));
+        }
+    }
+
+    output.push_str(&format!("segment_count: {}\n", speech_segments.len()));
+    output.push_str(&format!("flagged_count: {}\n", flagged_count));
+
+    output.push_str("notation:\n");
+    output.push_str(
+        "  numbered_segments: each segment has a leading number for precise reference\n",
+    );
+    output.push_str(
+        "  strikethrough: word had very low alignment confidence (<30%)\n",
+    );
+    output.push_str(
+        "  warning_emoji: segment was heuristically flagged as likely incorrect\n",
+    );
+    output.push_str(&format!(
+        "  confidence_shown_below: {}\n",
+        AI_CONFIDENCE_DISPLAY_BELOW
+    ));
+    output.push_str("---\n\n");
+
+    // ---------- Body ----------
+    output.push_str(&format!("# Transcript: {}\n\n", transcript.source_file));
+
+    let mut segment_number: u32 = 0;
+    for segment in &transcript.segments {
+        // Non-speech annotations: kept compact and clearly marked.
+        if segment.segment_type != SegmentType::Speech {
+            let label = match segment.segment_type {
+                SegmentType::Noise => "[noise]",
+                SegmentType::Music => "[music]",
+                SegmentType::Silence => "[silence]",
+                SegmentType::Unknown => "[unknown]",
+                SegmentType::Speech => unreachable!(),
+            };
+            output.push_str(&format!(
+                "_{} `[{} → {}]`_\n\n",
+                label,
+                format_timestamp_ms(segment.start_ms),
+                format_timestamp_ms(segment.end_ms)
+            ));
+            continue;
+        }
+
+        segment_number += 1;
+        let speaker = segment
+            .speaker_name
+            .clone()
+            .or_else(|| segment.speaker_id.clone())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Header line
+        let confidence_pct = (segment.confidence * 100.0).round() as u8;
+        let show_confidence = confidence_pct < AI_CONFIDENCE_DISPLAY_BELOW;
+
+        output.push_str(&format!(
+            "**{}** {} `[{} → {}]`",
+            segment_number,
+            speaker,
+            format_timestamp_ms(segment.start_ms),
+            format_timestamp_ms(segment.end_ms)
+        ));
+        if show_confidence {
+            output.push_str(&format!(" ({}%)", confidence_pct));
+        }
+        if segment.is_flagged {
+            output.push_str(" \u{26A0}"); // ⚠
+        }
+        output.push_str(":\n");
+
+        // Text body with optional inline strikethrough
+        output.push_str(&render_text_with_strikethrough(segment));
+        output.push('\n');
+
+        // Flag reason as blockquote
+        if let Some(reason) = &segment.flag_reason {
+            output.push_str(&format!("> Flagged: {}\n", reason));
+        }
+        output.push('\n');
     }
 
     output

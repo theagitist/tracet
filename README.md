@@ -21,8 +21,12 @@ Everything runs on your machine: no cloud APIs.
 - **Optional LLM accuracy review** via Ollama (any local model)
 - **`.tracet` project bundles**: save a zip containing the converted audio
   + transcript so you can transcribe on a powerful machine and edit elsewhere
-- **Markdown / plain-text exports** with speaker labels, timestamps, and
-  optional highlighting of low-confidence sections
+- **Three export formats**:
+  - **Markdown** (`.md`): prose for humans
+  - **Plain text** (`.txt`): minimal
+  - **AI-friendly Markdown** (`.ai.md`): YAML frontmatter with metadata,
+    numbered segments, structured-but-readable; designed to hand off to any
+    LLM without committing to a specific downstream task
 
 ## Architecture
 
@@ -55,9 +59,9 @@ Everything runs on your machine: no cloud APIs.
 - Python 3.12 (3.14 is too new for the ML stack at the moment)
 - FFmpeg (auto-installed on first run if Homebrew is available)
 - Optional: Ollama (https://ollama.ai) for LLM-based accuracy review
-- Optional: HuggingFace account + access token for speaker diarization
-  (https://huggingface.co/settings/tokens: also requires accepting the
-  pyannote/speaker-diarization-3.1 license)
+- Optional: HuggingFace account and access token for speaker diarization.
+  You will also need to accept the `pyannote/speaker-diarization-3.1`
+  license. Tokens are issued at https://huggingface.co/settings/tokens.
 
 ## Installation
 
@@ -153,4 +157,4 @@ Tracet wires together excellent open-source work:
 
 ## License
 
-MIT: see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

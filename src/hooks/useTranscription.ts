@@ -140,19 +140,22 @@ export function useTranscription() {
           options,
         });
 
-        const ext = options.format === "Md" ? "md" : "txt";
+        const formatInfo =
+          options.format === "AiMd"
+            ? { ext: "ai.md", filterName: "AI-friendly Markdown", filterExts: ["md"] }
+            : options.format === "Md"
+              ? { ext: "md", filterName: "Markdown", filterExts: ["md"] }
+              : { ext: "txt", filterName: "Text", filterExts: ["txt"] };
+
         const defaultName = store.transcript.source_file.replace(
           /\.[^.]+$/,
-          `.${ext}`
+          `.${formatInfo.ext}`
         );
 
         const filePath = await save({
           defaultPath: defaultName,
           filters: [
-            {
-              name: options.format === "Md" ? "Markdown" : "Text",
-              extensions: [ext],
-            },
+            { name: formatInfo.filterName, extensions: formatInfo.filterExts },
           ],
         });
 

@@ -1,11 +1,36 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, FileText, FileType, Sparkles } from "lucide-react";
 import { useTranscription } from "../hooks/useTranscription";
 import type { ExportOptions } from "../types/transcript";
 
 interface Props {
   onClose: () => void;
 }
+
+const FORMATS = [
+  {
+    id: "Md" as const,
+    label: "Markdown",
+    ext: ".md",
+    icon: FileType,
+    description: "Standard prose for humans, docs, blogs",
+  },
+  {
+    id: "Txt" as const,
+    label: "Plain Text",
+    ext: ".txt",
+    icon: FileText,
+    description: "Minimal, no formatting",
+  },
+  {
+    id: "AiMd" as const,
+    label: "AI-friendly Markdown",
+    ext: ".ai.md",
+    icon: Sparkles,
+    description:
+      "Structured metadata + numbered segments: hand off to any LLM",
+  },
+];
 
 export function ExportDialog({ onClose }: Props) {
   const { exportTranscript } = useTranscription();
@@ -22,10 +47,14 @@ export function ExportDialog({ onClose }: Props) {
     onClose();
   };
 
+  // The AI-friendly export is opinionated: its structure is fixed and the
+  // optional toggles below don't apply.
+  const aiMode = options.format === "AiMd";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-96 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="w-[440px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-xl">
+        <div className="mb-5 flex items-center justify-between">
           <h2 className="text-base font-medium text-[var(--color-text)]">
             Export Transcript
           </h2>
@@ -38,55 +67,82 @@ export function ExportDialog({ onClose }: Props) {
         </div>
 
         {/* Format selection */}
-        <div className="mb-4">
+        <div className="mb-5">
           <label className="mb-2 block text-xs font-medium text-[var(--color-text-muted)]">
             Format
           </label>
-          <div className="flex gap-2">
-            {(["Md", "Txt"] as const).map((fmt) => (
-              <button
-                key={fmt}
-                onClick={() => setOptions({ ...options, format: fmt })}
-                className={`rounded px-4 py-2 text-sm transition-colors ${
-                  options.format === fmt
-                    ? "bg-[var(--color-accent)] text-white"
-                    : "bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-                }`}
-              >
-                {fmt === "Md" ? "Markdown (.md)" : "Plain Text (.txt)"}
-              </button>
-            ))}
+          <div className="space-y-2">
+            {FORMATS.map((fmt) => {
+              const Icon = fmt.icon;
+              const selected = options.format === fmt.id;
+              return (
+                <button
+                  key={fmt.id}
+                  onClick={() => setOptions({ ...options, format: fmt.id })}
+                  className={`flex w-full items-start gap-3 rounded border px-3 py-2.5 text-left transition-colors ${
+                    selected
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)]/5"
+                      : "border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-accent)]/50"
+                  }`}
+                >
+                  <Icon
+                    size={16}
+                    className={`mt-0.5 shrink-0 ${selected ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}`}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[var(--color-text)]">
+                        {fmt.label}
+                      </span>
+                      <span className="text-xs text-[var(--color-text-muted)]">
+                        {fmt.ext}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                      {fmt.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Options */}
-        <div className="mb-6 space-y-3">
-          <Checkbox
-            label="Include timestamps"
-            checked={options.include_timestamps}
-            onChange={(v) => setOptions({ ...options, include_timestamps: v })}
-          />
-          <Checkbox
-            label="Include speaker labels"
-            checked={options.include_speaker_labels}
-            onChange={(v) =>
-              setOptions({ ...options, include_speaker_labels: v })
-            }
-          />
-          <Checkbox
-            label="Highlight low-confidence text"
-            checked={options.highlight_low_confidence}
-            onChange={(v) =>
-              setOptions({ ...options, highlight_low_confidence: v })
-            }
-          />
-          <Checkbox
-            label="Include non-speech annotations"
-            checked={options.include_annotations}
-            onChange={(v) =>
-              setOptions({ ...options, include_annotations: v })
-            }
-          />
+        {/* Options (only apply to .md and .txt) */}
+        <div className={aiMode ? "pointer-events-none mb-5 opacity-40" : "mb-5"}>
+          <label className="mb-2 block text-xs font-medium text-[var(--color-text-muted)]">
+            Options {aiMode && "(fixed for AI format)"}
+          </label>
+          <div className="space-y-2.5">
+            <Checkbox
+              label="Include timestamps"
+              checked={options.include_timestamps}
+              onChange={(v) =>
+                setOptions({ ...options, include_timestamps: v })
+              }
+            />
+            <Checkbox
+              label="Include speaker labels"
+              checked={options.include_speaker_labels}
+              onChange={(v) =>
+                setOptions({ ...options, include_speaker_labels: v })
+              }
+            />
+            <Checkbox
+              label="Highlight low-confidence text"
+              checked={options.highlight_low_confidence}
+              onChange={(v) =>
+                setOptions({ ...options, highlight_low_confidence: v })
+              }
+            />
+            <Checkbox
+              label="Include non-speech annotations"
+              checked={options.include_annotations}
+              onChange={(v) =>
+                setOptions({ ...options, include_annotations: v })
+              }
+            />
+          </div>
         </div>
 
         {/* Actions */}

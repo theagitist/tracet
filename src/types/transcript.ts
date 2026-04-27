@@ -52,7 +52,7 @@ export interface PipelineProgress {
 }
 
 export interface ExportOptions {
-  format: "Txt" | "Md";
+  format: "Txt" | "Md" | "AiMd";
   include_timestamps: boolean;
   include_speaker_labels: boolean;
   highlight_low_confidence: boolean;
