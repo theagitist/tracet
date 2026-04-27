@@ -1,0 +1,17 @@
+node_modules/
+dist/
+src-tauri/target/
+models/*.bin
+models/*.gguf
+sidecar/.venv/
+.DS_Store
+*.log
+
+# Generated transcription artifacts and project bundles
+*.tracet
+test-audio/
+# Loose exports at repo root (per-file transcripts the user has been generating)
+/*.md
+/*.txt
+!/README.md
+!/CLAUDE.md
