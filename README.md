@@ -67,9 +67,10 @@ Everything runs on your machine: no cloud APIs.
 
 ### From a release DMG
 
-Download the latest `Tracet_<version>_aarch64.dmg`, drag the app to
-Applications, and launch. On first run a setup screen offers to install the
-remaining dependencies (FFmpeg, the Python venv, whisperX).
+Download the latest [`.dmg` from GitHub Releases](https://github.com/theagitist/tracet/releases/latest),
+drag the app to Applications, and launch. On first run a setup screen
+offers to install the remaining dependencies (FFmpeg, the Python venv,
+whisperX).
 
 ### From source
 

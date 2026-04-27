@@ -161,6 +161,42 @@ immediately without an app restart.
 - Don't mock at module boundaries that aren't currently tested. Most of
   this app is integration-tested by hand.
 
+## Conventions
+
+- **Commit messages** follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+  Format: `type(scope): subject` in lowercase, imperative mood, no trailing
+  period. Body explains the *why*. Common types: `feat`, `fix`, `docs`,
+  `refactor`, `chore`, `perf`. Use `!` after the type for breaking changes
+  (e.g. `feat(export)!: drop legacy txt format`).
+- **Never use em dashes** in any authored content (commit messages, code
+  comments, docs, UI copy, release notes, GitHub repo description, etc.).
+  Reach for proper punctuation instead: colon to introduce an explanation
+  or list, period to break sentences, comma for a brief aside, semicolon
+  to join two related independent clauses, or parentheses for asides.
+  Never substitute with a single hyphen.
+- **No Claude attribution** in commits, PR descriptions, or release notes.
+  Drop the standard `Co-Authored-By: Claude ...` trailer entirely.
+
+## Release process
+
+Release artefacts live in GitHub Releases (not GitHub Packages, which is
+for code registries like npm). The flow:
+
+1. Bump the version in three places: `package.json`, `src-tauri/Cargo.toml`,
+   `src-tauri/tauri.conf.json`. They must agree.
+2. Update README/CLAUDE.md if behaviour changed.
+3. Commit using Conventional Commits.
+4. Build the release artefact: `cargo tauri build`. The `.dmg` lands at
+   `src-tauri/target/release/bundle/dmg/Tracet_<version>_aarch64.dmg`.
+5. Tag with an annotated tag: `git tag -a vX.Y.Z -m "Tracet X.Y.Z (...)"`.
+6. Push: `git push origin main && git push origin vX.Y.Z`.
+7. Create the release with the `.dmg` attached:
+   `gh release create vX.Y.Z <path-to-dmg> --title "Tracet X.Y.Z" --notes-file <notes>`.
+
+Force-pushing a tag (e.g. after a history rewrite) preserves the release
+on GitHub. The release is bound to the tag *name*, not the SHA. Deleting
+a remote tag, however, deletes the associated release.
+
 ## License
 
 MIT.
