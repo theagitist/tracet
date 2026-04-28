@@ -110,6 +110,55 @@ ollama pull llama3.1:8b
 
 Then enable LLM review in Settings.
 
+## Privacy
+
+Tracet is privacy-first by design. Audio files, transcripts, and saved
+`.tracet` projects never leave your machine for normal use. There is no
+telemetry, no analytics, no crash reporting, and no auto-updater. The
+app does not phone home.
+
+There are exactly three places where the app makes network requests:
+
+1. **Model downloads on first run.** whisperX and pyannote download their
+   model weights from HuggingFace and the Torch Hub the first time you
+   transcribe. These are one-way downloads (no audio or transcript data
+   is sent), and once cached at `~/.cache/huggingface/hub/` and
+   `~/.cache/torch/hub/checkpoints/`, transcription works fully offline.
+2. **HuggingFace token use.** If you set a HuggingFace token to enable
+   speaker diarization, that token is sent to `huggingface.co` solely to
+   authenticate the pyannote model download. It is not transmitted to
+   any other endpoint. The token is stored as plain text in your
+   browser's `localStorage` (under the key `tracet:settings`) and is
+   readable by anything with access to your user account on this
+   machine. Treat it like a low-stakes credential and do not share the
+   `tracet:settings` value.
+3. **Ollama LLM review (optional, local by default).** When LLM review is
+   enabled, transcript text is sent to whatever URL the **Ollama URL**
+   setting points at. The default is `http://localhost:11434`, so the
+   data stays on this machine. If you change that URL to a non-local
+   host (anything other than `localhost`, `127.0.0.1`, `::1`, or
+   `0.0.0.0`), every transcript segment Tracet reviews will be sent in
+   plaintext to that host. Settings detects this case, shows a red
+   warning, and requires you to type `I understand` to apply the change.
+   Keep the URL on `localhost` to preserve the privacy guarantee.
+
+Things that explicitly do NOT happen:
+
+- No transcript, audio, or project data is ever sent to a server Tracet
+  controls. There is no Tracet backend.
+- No analytics SDKs (Sentry, PostHog, Mixpanel, Amplitude, Google
+  Analytics, Segment, etc.) are bundled.
+- The Tauri auto-updater is not registered. You update by downloading a
+  new release manually.
+- The webview only loads bundled local assets; no third-party scripts
+  are fetched at runtime.
+
+If you want to verify any of this, the only outbound HTTP code paths
+are `src-tauri/src/commands/setup.rs` (Ollama health check), and
+`src-tauri/src/commands/review.rs` (Ollama generate call); plus the
+HuggingFace fetches inside the Python sidecar (`sidecar/diarize.py` via
+the whisperX and pyannote libraries).
+
 ## Project layout
 
 ```
