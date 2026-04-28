@@ -108,6 +108,7 @@ export function useTranscription() {
         transcript: store.transcript,
         outputPath: filePath,
       });
+      store.markSaved();
     } catch (err) {
       store.setError(`Failed to save project: ${err}`);
     }
@@ -124,7 +125,7 @@ export function useTranscription() {
       const transcript = await invoke<Transcript>("load_project", {
         inputPath: filePath,
       });
-      store.setTranscript(transcript);
+      store.setLoadedTranscript(transcript);
     } catch (err) {
       store.setError(`Failed to open project: ${err}`);
     }

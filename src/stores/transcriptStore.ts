@@ -22,8 +22,14 @@ interface TranscriptStore {
   progressMessage: string;
   error: string | null;
   sourceFilePath: string | null;
+  // True when a freshly transcribed result is in memory but has not yet been
+  // saved as a `.tracet` project. Used to gate window close so the user does
+  // not lose hours of transcription by clicking the wrong button.
+  isUnsavedNew: boolean;
 
   setTranscript: (t: Transcript) => void;
+  setLoadedTranscript: (t: Transcript) => void;
+  markSaved: () => void;
   updateSegmentText: (segmentId: string, newText: string) => void;
   renameSpeaker: (speakerId: string, newName: string) => void;
   updateProgress: (progress: PipelineProgress) => void;
@@ -39,6 +45,7 @@ export const useTranscriptStore = create<TranscriptStore>((set) => ({
   progressMessage: "",
   error: null,
   sourceFilePath: null,
+  isUnsavedNew: false,
 
   setTranscript: (t) =>
     set({
@@ -47,7 +54,20 @@ export const useTranscriptStore = create<TranscriptStore>((set) => ({
       progress: 100,
       progressMessage: "Complete",
       error: null,
+      isUnsavedNew: true,
     }),
+
+  setLoadedTranscript: (t) =>
+    set({
+      transcript: t,
+      processingState: "done",
+      progress: 100,
+      progressMessage: "Complete",
+      error: null,
+      isUnsavedNew: false,
+    }),
+
+  markSaved: () => set({ isUnsavedNew: false }),
 
   updateSegmentText: (segmentId, newText) =>
     set((state) => {
@@ -113,6 +133,7 @@ export const useTranscriptStore = create<TranscriptStore>((set) => ({
       progressMessage: "",
       error: null,
       sourceFilePath: null,
+      isUnsavedNew: false,
     }),
 
   setSourceFilePath: (path) => set({ sourceFilePath: path }),

@@ -8,6 +8,8 @@ import { SetupScreen } from "./components/SetupScreen";
 import { useTranscriptStore } from "./stores/transcriptStore";
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, Wrench, X } from "lucide-react";
 
 interface SetupStatus {
@@ -38,6 +40,35 @@ function App() {
   useEffect(() => {
     refreshSetup();
   }, [refreshSetup]);
+
+  // Intercept window close to warn before discarding an unsaved transcription.
+  // Read store state at event time (not via the React selector hooks) so the
+  // handler always sees the latest values without re-subscribing on every
+  // mutation.
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    const unlistenP = appWindow.onCloseRequested(async (event) => {
+      const state = useTranscriptStore.getState();
+      if (!state.transcript || !state.isUnsavedNew) return;
+
+      event.preventDefault();
+      const proceed = await ask(
+        "You have a new transcription that has not been saved as a .tracet project. Closing now will discard it.\n\nClose without saving?",
+        {
+          title: "Unsaved transcription",
+          kind: "warning",
+          okLabel: "Close anyway",
+          cancelLabel: "Cancel",
+        },
+      );
+      if (proceed) {
+        await appWindow.destroy();
+      }
+    });
+    return () => {
+      unlistenP.then((unlisten) => unlisten()).catch(() => {});
+    };
+  }, []);
 
   const canTranscribe =
     !!setupStatus &&
