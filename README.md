@@ -30,27 +30,14 @@ Everything runs on your machine: no cloud APIs.
 
 ## Architecture
 
-```
-┌───────────────────────────────────────────────────┐
-│  React + TypeScript + Tailwind CSS frontend       │
-│  (Vite, served by Tauri webview)                  │
-└──────────────┬────────────────────────────────────┘
-               │ Tauri IPC
-┌──────────────▼────────────────────────────────────┐
-│  Rust backend (Tauri v2)                          │
-│  - Pipeline orchestrator                          │
-│  - FFmpeg child process for media conversion      │
-│  - Python sidecar manager                         │
-│  - Ollama HTTP client (LLM review)                │
-│  - .tracet zip pack/unpack                        │
-└──────────────┬────────────────────────────────────┘
-               │ stdin/stdout JSON
-┌──────────────▼────────────────────────────────────┐
-│  Python sidecar (sidecar/.venv)                   │
-│  - whisperX (faster-whisper backend)              │
-│  - wav2vec2 phoneme alignment                     │
-│  - pyannote speaker diarization                   │
-└───────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    FE["<b>React + TypeScript + Tailwind CSS frontend</b><br/>Vite, served by Tauri webview"]
+    BE["<b>Rust backend (Tauri v2)</b><br/>Pipeline orchestrator<br/>FFmpeg child process for media conversion<br/>Python sidecar manager<br/>Ollama HTTP client (LLM review)<br/>.tracet zip pack/unpack"]
+    SC["<b>Python sidecar (sidecar/.venv)</b><br/>whisperX (faster-whisper backend)<br/>wav2vec2 phoneme alignment<br/>pyannote speaker diarization"]
+
+    FE -- "Tauri IPC" --> BE
+    BE -- "stdin/stdout JSON" --> SC
 ```
 
 ## Requirements
