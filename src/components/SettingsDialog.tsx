@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   X,
   Download,
@@ -9,10 +9,33 @@ import {
   AlertTriangle,
   Zap,
   Crown,
+  ShieldAlert,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { HardwareInfo, ModelProfile } from "../types/transcript";
 import { loadSettings, saveSettings } from "../lib/settings";
+
+const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const REMOTE_CONFIRM_PHRASE = "I understand";
+
+const LOCAL_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "[::1]",
+]);
+
+function isLocalOllamaUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return LOCAL_HOSTS.has(parsed.hostname);
+  } catch {
+    // Unparseable means the user is mid-typing. Treat as local so we don't
+    // prematurely scream "remote" while they're still typing the protocol.
+    return true;
+  }
+}
 
 interface Props {
   onClose: () => void;
@@ -26,6 +49,8 @@ export function SettingsDialog({ onClose }: Props) {
   const [selectedOllama, setSelectedOllama] = useState(initial.ollamaModel);
   const [hfToken, setHfToken] = useState(initial.hfToken);
   const [ollamaUrl, setOllamaUrl] = useState(initial.ollamaUrl);
+  const [ollamaUrlDraft, setOllamaUrlDraft] = useState(initial.ollamaUrl);
+  const [remoteConfirmText, setRemoteConfirmText] = useState("");
   const [enableLlmReview] = useState(initial.enableLlmReview);
   const [ollamaStatus, setOllamaStatus] = useState<
     "checking" | "connected" | "disconnected"
@@ -43,6 +68,35 @@ export function SettingsDialog({ onClose }: Props) {
       enableLlmReview,
     });
   }, [selectedWhisper, selectedOllama, hfToken, ollamaUrl, enableLlmReview]);
+
+  // The Ollama URL is the only setting that can leak transcript text off the
+  // machine. Only commit the draft to the active value when it's local, or
+  // when the user has typed the confirmation phrase verbatim.
+  const draftIsLocal = useMemo(
+    () => isLocalOllamaUrl(ollamaUrlDraft),
+    [ollamaUrlDraft],
+  );
+  const draftConfirmed =
+    remoteConfirmText.trim().toLowerCase() ===
+    REMOTE_CONFIRM_PHRASE.toLowerCase();
+  const draftDiffers = ollamaUrlDraft !== ollamaUrl;
+  const needsRemoteConfirmation = draftDiffers && !draftIsLocal;
+
+  useEffect(() => {
+    if (!draftDiffers) return;
+    if (draftIsLocal || draftConfirmed) {
+      setOllamaUrl(ollamaUrlDraft);
+      setRemoteConfirmText("");
+    }
+  }, [draftDiffers, draftIsLocal, draftConfirmed, ollamaUrlDraft]);
+
+  const draftHostname = useMemo(() => {
+    try {
+      return new URL(ollamaUrlDraft).hostname || ollamaUrlDraft;
+    } catch {
+      return ollamaUrlDraft;
+    }
+  }, [ollamaUrlDraft]);
 
   useEffect(() => {
     // Detect hardware and get available profiles
@@ -271,10 +325,61 @@ export function SettingsDialog({ onClose }: Props) {
             </label>
             <input
               type="text"
-              value={ollamaUrl}
-              onChange={(e) => setOllamaUrl(e.target.value)}
-              className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]"
+              value={ollamaUrlDraft}
+              onChange={(e) => setOllamaUrlDraft(e.target.value)}
+              className={`w-full rounded border bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] outline-none ${
+                needsRemoteConfirmation
+                  ? "border-red-500/60 focus:border-red-500"
+                  : "border-[var(--color-border)] focus:border-[var(--color-accent)]"
+              }`}
             />
+            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+              Default <code>{DEFAULT_OLLAMA_URL}</code> keeps every transcript
+              on this machine. A non-local URL sends transcript text off your
+              device.
+            </p>
+
+            {needsRemoteConfirmation && (
+              <div className="mt-3 rounded border-2 border-red-500/70 bg-red-500/10 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-300">
+                  <ShieldAlert size={16} className="shrink-0" />
+                  This breaks the privacy guarantee
+                </div>
+                <p className="mb-2 text-xs leading-relaxed text-red-100/90">
+                  Pointing Ollama at <code>{draftHostname}</code> means every
+                  segment of every transcript you review will be sent there in
+                  plaintext over the network. Tracet was designed to keep
+                  recordings on your machine. We strongly recommend keeping the
+                  URL at <code>{DEFAULT_OLLAMA_URL}</code> and running Ollama
+                  locally.
+                </p>
+                <p className="mb-2 text-xs text-red-100/90">
+                  If you understand and still want this, type{" "}
+                  <code className="rounded bg-black/30 px-1">
+                    {REMOTE_CONFIRM_PHRASE}
+                  </code>{" "}
+                  below to apply the change.
+                </p>
+                <input
+                  type="text"
+                  value={remoteConfirmText}
+                  onChange={(e) => setRemoteConfirmText(e.target.value)}
+                  placeholder={`Type "${REMOTE_CONFIRM_PHRASE}" to confirm`}
+                  className="w-full rounded border border-red-500/40 bg-black/20 px-3 py-2 text-sm text-[var(--color-text)] placeholder-red-300/40 outline-none focus:border-red-400"
+                />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    onClick={() => {
+                      setOllamaUrlDraft(DEFAULT_OLLAMA_URL);
+                      setRemoteConfirmText("");
+                    }}
+                    className="text-xs font-medium text-red-200 hover:text-red-100 hover:underline"
+                  >
+                    Revert to localhost
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
