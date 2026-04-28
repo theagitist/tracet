@@ -22,9 +22,10 @@ interface SetupStatus {
 
 interface Props {
   onComplete: () => void;
+  onClose?: () => void;
 }
 
-export function SetupScreen({ onComplete }: Props) {
+export function SetupScreen({ onComplete, onClose }: Props) {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -68,10 +69,10 @@ export function SetupScreen({ onComplete }: Props) {
 
   if (!status) {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="w-[480px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
         <Loader2
           size={24}
-          className="animate-spin text-[var(--color-accent)]"
+          className="mx-auto animate-spin text-[var(--color-accent)]"
         />
       </div>
     );
@@ -83,14 +84,25 @@ export function SetupScreen({ onComplete }: Props) {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="w-[480px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
-        <h1 className="mb-1 text-xl font-semibold text-[var(--color-text)]">
-          Welcome to Tracet
+    <div className="w-[480px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8">
+      <div className="mb-1 flex items-start justify-between">
+        <h1 className="text-xl font-semibold text-[var(--color-text)]">
+          Set up dependencies
         </h1>
-        <p className="mb-6 text-sm text-[var(--color-text-muted)]">
-          A few dependencies need to be set up before you can start transcribing.
-        </p>
+        {onClose && (
+          <button
+            onClick={onClose}
+            title="Close"
+            className="rounded p-1 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+      <p className="mb-6 text-sm text-[var(--color-text-muted)]">
+        A few dependencies need to be set up before you can transcribe new
+        recordings. Existing projects can be opened without these.
+      </p>
 
         {/* Checklist */}
         <div className="mb-6 space-y-3">
@@ -193,7 +205,6 @@ export function SetupScreen({ onComplete }: Props) {
             </p>
           </div>
         )}
-      </div>
     </div>
   );
 }

@@ -5,9 +5,14 @@ import { useTranscriptStore } from "../stores/transcriptStore";
 interface ToolbarProps {
   onExport: () => void;
   onSettings: () => void;
+  canTranscribe?: boolean;
 }
 
-export function Toolbar({ onExport, onSettings }: ToolbarProps) {
+export function Toolbar({
+  onExport,
+  onSettings,
+  canTranscribe = true,
+}: ToolbarProps) {
   const { openFile, saveProject, openProject } = useTranscription();
   const transcript = useTranscriptStore((s) => s.transcript);
   const processingState = useTranscriptStore((s) => s.processingState);
@@ -22,10 +27,14 @@ export function Toolbar({ onExport, onSettings }: ToolbarProps) {
         <div className="mr-2 h-4 w-px bg-[var(--color-border)]" />
         <ToolbarButton
           onClick={openFile}
-          disabled={isProcessing}
+          disabled={isProcessing || !canTranscribe}
           icon={<FileAudio size={16} />}
           label="Open Media"
-          title="Open an audio or video file and run transcription"
+          title={
+            canTranscribe
+              ? "Open an audio or video file and run transcription"
+              : "Transcription dependencies are missing. Open the setup banner or Settings to install them."
+          }
         />
         <ToolbarButton
           onClick={openProject}
