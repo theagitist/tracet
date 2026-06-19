@@ -7,6 +7,9 @@ sidecar/.venv/
 .DS_Store
 *.log
 
+# Code-signing / notarization credentials (never commit)
+signing.env
+
 # Generated transcription artifacts and project bundles
 *.tracet
 test-audio/
