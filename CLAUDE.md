@@ -11,7 +11,10 @@ diarization. Optional LLM accuracy review is provided via a local Ollama
 instance over HTTP. Quality is the top priority for technical decisions
 unless explicitly traded against performance.
 
-Target platform: macOS on Apple Silicon. Other platforms are not currently
+Target platform: macOS on Apple Silicon (primary). macOS on Intel (x86_64)
+is supported on a best-effort basis: it works, but with no MPS acceleration
+(CPU-only for transcription, alignment, and diarization), so it is slower.
+Releases ship a `.dmg` per architecture. Non-macOS platforms are not
 supported.
 
 ## Stack at a glance
@@ -31,8 +34,16 @@ supported.
 
 ```bash
 ./dev.sh                      # dev mode with hot reload
-cargo tauri build             # release .app + .dmg
+cargo tauri build             # quick local release (.app + .dmg), unsigned
+./build.sh                    # signed + notarized aarch64 .dmg (default)
+./build.sh x86_64             # signed + notarized Intel .dmg
+./build.sh universal          # signed + notarized universal .dmg
 ```
+
+`build.sh` reads code-signing and notarization credentials from
+`signing.env` (gitignored). It signs in a non-synced temp dir because a
+file-sync daemon watching this tree re-stamps `com.apple.FinderInfo` on the
+`.app` within seconds, which `codesign` rejects. See the release section.
 
 `./dev.sh` exists because some development setups have a broken nvm
 lazy-load shim that breaks bare `npm`/`node`. It locates a usable node
@@ -93,7 +104,10 @@ or `node` are on PATH.** Use the full binary path:
 2. **Python 3.14 is too new.** The venv must be created with `python3.12`.
    `commands/setup.rs` and `dev.sh` both assume 3.12.
 3. **faster-whisper does not support MPS.** Transcription runs on CPU
-   with int8 quantisation. Alignment and diarization can use MPS.
+   with int8 quantisation. Alignment and diarization can use MPS on Apple
+   Silicon. On Intel there is no MPS, so `diarize.py` falls back to CPU for
+   all stages (it already defaults `torch_device` to `cpu` and only upgrades
+   to `mps` when available, with a CPU retry around alignment).
 4. **whisperX on first run downloads several GB.** Models cached at
    `~/.cache/huggingface/hub/` and `~/.cache/torch/hub/checkpoints/`.
    `large-v3-turbo` is the default and offers the best speed/quality tradeoff.
@@ -186,16 +200,48 @@ for code registries like npm). The flow:
    `src-tauri/tauri.conf.json`. They must agree.
 2. Update README/CLAUDE.md if behaviour changed.
 3. Commit using Conventional Commits.
-4. Build the release artefact: `cargo tauri build`. The `.dmg` lands at
-   `src-tauri/target/release/bundle/dmg/Tracet_<version>_aarch64.dmg`.
+4. Build the signed + notarized artefacts with `./build.sh` (needs
+   `signing.env`; see "Code signing and notarization" below). Build both
+   architectures:
+   - `./build.sh aarch64` produces
+     `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Tracet_<version>_aarch64.dmg`
+   - `./build.sh x86_64` produces
+     `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/Tracet_<version>_x64.dmg`
+   Each is signed, notarized (Apple status Accepted), and stapled. Verify
+   with `xcrun stapler validate <dmg>` and
+   `spctl -a -t open --context context:primary-signature <dmg>`.
 5. Tag with an annotated tag: `git tag -a vX.Y.Z -m "Tracet X.Y.Z (...)"`.
 6. Push: `git push origin main && git push origin vX.Y.Z`.
-7. Create the release with the `.dmg` attached:
-   `gh release create vX.Y.Z <path-to-dmg> --title "Tracet X.Y.Z" --notes-file <notes>`.
+7. Create the release with BOTH `.dmg` files attached:
+   `gh release create vX.Y.Z <aarch64-dmg> <x64-dmg> --title "Tracet X.Y.Z" --notes-file <notes>`.
 
 Force-pushing a tag (e.g. after a history rewrite) preserves the release
 on GitHub. The release is bound to the tag *name*, not the SHA. Deleting
 a remote tag, however, deletes the associated release.
+
+## Code signing and notarization
+
+Releases are distributed outside the Mac App Store as signed + notarized
+`.dmg` files (Developer ID). The App Store path (sandboxed) is a separate,
+deferred effort.
+
+- **Credentials** live in `signing.env` (gitignored, never committed):
+  `APPLE_SIGNING_IDENTITY` (the "Developer ID Application: ..." cert common
+  name) plus the App Store Connect API key trio `APPLE_API_ISSUER`,
+  `APPLE_API_KEY` (key id), and `APPLE_API_KEY_PATH` (path to the `.p8`,
+  stored under `~/.appstoreconnect/private_keys/`, not in the repo).
+- **`build.sh` does the work**, not bare `cargo tauri build`. It builds an
+  unsigned `.app`, then signs, packages the `.dmg`, notarizes, and staples.
+- **Why sign in a temp dir:** a file-sync daemon watches this project tree
+  and re-adds `com.apple.FinderInfo` (the custom-icon bit) to the `.app`
+  within a few seconds of any `xattr` strip. `codesign` rejects bundles
+  carrying FinderInfo ("resource fork ... detritus not allowed"). So
+  `build.sh` copies the bundle into a `mktemp` dir under `/var/folders`
+  (not synced), where nothing re-stamps it, and does all signing there.
+- **Entitlements** are in `src-tauri/entitlements.plist`: hardened-runtime
+  exceptions (`allow-jit`, `allow-unsigned-executable-memory`,
+  `disable-library-validation`, `allow-dyld-environment-variables`) required
+  by the Python/torch stack. These are NOT App Sandbox keys.
 
 ## License
 

@@ -42,7 +42,11 @@ flowchart TB
 
 ## Requirements
 
-- macOS on Apple Silicon (M1/M2/M3 or later)
+- macOS on Apple Silicon (M1/M2/M3 or later), recommended
+- macOS on Intel (x86_64) is also supported. Intel Macs have no Metal (MPS)
+  acceleration, so alignment and diarization fall back to CPU on top of the
+  already CPU-only transcription. Everything works, but expect noticeably
+  slower processing. Prefer a smaller Whisper model on lower-RAM Intel Macs.
 - Python 3.12 (3.14 is too new for the ML stack at the moment)
 - FFmpeg (auto-installed on first run if Homebrew is available)
 - Optional: Ollama (https://ollama.ai) for LLM-based accuracy review
@@ -55,9 +59,15 @@ flowchart TB
 ### From a release DMG
 
 Download the latest [`.dmg` from GitHub Releases](https://github.com/theagitist/tracet/releases/latest),
-drag the app to Applications, and launch. On first run a setup screen
+picking the build for your Mac:
+
+- `Tracet_<version>_aarch64.dmg` for Apple Silicon (M1/M2/M3 or later)
+- `Tracet_<version>_x64.dmg` for Intel
+
+Drag the app to Applications, and launch. On first run a setup screen
 offers to install the remaining dependencies (FFmpeg, the Python venv,
-whisperX).
+whisperX). The app is signed and notarized, so Gatekeeper opens it without
+the "unidentified developer" warning.
 
 ### From source
 
