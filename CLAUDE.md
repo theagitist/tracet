@@ -47,9 +47,9 @@ file-sync daemon watching this tree re-stamps `com.apple.FinderInfo` on the
 
 `./dev.sh` exists because some development setups have a broken nvm
 lazy-load shim that breaks bare `npm`/`node`. It locates a usable node
-binary by scanning `~/.nvm/versions/node` directly. **Do not assume `npm`
-or `node` are on PATH.** Use the full binary path:
-`/Users/adri.m/.nvm/versions/node/v25.9.0/bin/{node,npm,npx}`.
+binary by scanning `~/.nvm/versions/node` directly. Don't assume `npm`
+or `node` are on PATH. Use `./dev.sh`, or the binaries under
+`~/.nvm/versions/node/<version>/bin/` (`node`, `npm`, `npx`).
 
 ## Backend layout (`src-tauri/src/`)
 
@@ -97,7 +97,7 @@ or `node` are on PATH.** Use the full binary path:
 - The result line is prefixed with `###TRACET_RESULT###` because some
   libraries write log lines directly to stdout, polluting the JSON channel.
 
-## Critical gotchas
+## Gotchas
 
 1. **nvm lazy-load is broken on the dev machine.** Always use full binary
    paths for node/npm/npx, or use `./dev.sh`.
@@ -182,7 +182,7 @@ immediately without an app restart.
   period. Body explains the *why*. Common types: `feat`, `fix`, `docs`,
   `refactor`, `chore`, `perf`. Use `!` after the type for breaking changes
   (e.g. `feat(export)!: drop legacy txt format`).
-- **Never use em dashes** in any authored content (commit messages, code
+- Don't use em dashes in authored content (commit messages, code
   comments, docs, UI copy, release notes, GitHub repo description, etc.).
   Reach for proper punctuation instead: colon to introduce an explanation
   or list, period to break sentences, comma for a brief aside, semicolon
