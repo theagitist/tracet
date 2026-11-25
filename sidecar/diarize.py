@@ -194,10 +194,14 @@ def run_transcription(
         try:
             progress(82, "Identifying speakers (diarization)")
             start_heartbeat(82, "Identifying speakers")
-            diarize_model = whisperx.DiarizationPipeline(
-                use_auth_token=hf_token,
-                device=torch_device,
-            )
+            # whisperX 3.8 dropped the top-level re-export and renamed
+            # use_auth_token to token; existing venvs may still be older.
+            from whisperx.diarize import DiarizationPipeline
+
+            try:
+                diarize_model = DiarizationPipeline(token=hf_token, device=torch_device)
+            except TypeError:
+                diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=torch_device)
             diarize_segments = diarize_model(audio)
             result = whisperx.assign_word_speakers(diarize_segments, result)
             stop_heartbeat()
