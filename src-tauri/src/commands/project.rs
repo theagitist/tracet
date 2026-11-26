@@ -145,7 +145,7 @@ fn read_project(input_path: &str) -> Result<Transcript, String> {
     // multiple projects don't trample each other.
     let audio_dir = dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("com.tracet.app")
+        .join("ca.polivoxia.tracet")
         .join("projects")
         .join(&transcript.id);
     std::fs::create_dir_all(&audio_dir)
