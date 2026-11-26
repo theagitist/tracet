@@ -11,6 +11,11 @@ import wave
 import numpy as np
 
 SAMPLE_RATE = 16000
+UNSUPPORTED_AUDIO = (
+    "the audio in this file uses a codec Tracet can't decode. Tracet reads "
+    "AAC, MP3, FLAC, ALAC, Vorbis, Opus, AC-3, WMA, AMR and PCM audio. "
+    "Convert the file to MP3, M4A, WAV or FLAC and try again."
+)
 
 
 def decode(path, on_progress=None):
@@ -22,7 +27,12 @@ def decode(path, on_progress=None):
     with av.open(path) as container:
         if not container.streams.audio:
             raise ValueError("No audio track found in this file")
-        stream = container.streams.audio[0]
+        # The bundled FFmpeg only has decoders for common audio codecs (see
+        # scripts/build-pyav.sh). A stream without one has no codec_context,
+        # and decoding it crashes the process, so check first.
+        stream = next((s for s in container.streams.audio if s.codec_context is not None), None)
+        if stream is None:
+            raise ValueError(UNSUPPORTED_AUDIO)
         duration = container.duration / av.time_base if container.duration else None
         resampler = av.AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
         last = -1
