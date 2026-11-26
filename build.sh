@@ -1,7 +1,9 @@
 #!/bin/bash
 # Build a signed + notarized Tracet release .dmg (Apple Silicon only).
 #
-# Usage: ./build.sh
+# Usage: ./build.sh          signed + notarized .dmg (Developer ID)
+#        MAS=1 ./build.sh    Mac App Store .pkg (scripts/package-mas.sh);
+#                            MAS_UPLOAD=1 also uploads it
 #
 # The .app ships its own Python runtime (scripts/build-runtime.sh) in
 # Contents/Resources/python. Intel is not supported: torch 2.8, which
@@ -101,6 +103,12 @@ check_no_sync_copies() {
         exit 1
     fi
 }
+
+if [ "${MAS:-0}" = "1" ]; then
+    export APPLE_MAS_APP_IDENTITY APPLE_MAS_INSTALLER_IDENTITY MAS_PROVISIONING_PROFILE \
+        APPLE_API_KEY APPLE_API_ISSUER
+    exec scripts/package-mas.sh "$APP" "$VERSION"
+fi
 
 if [ -z "$SIGN_ID" ]; then
     rm -rf "$APP/Contents/Resources/python" "$APP/Contents/Resources/models"

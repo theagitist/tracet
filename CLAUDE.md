@@ -292,6 +292,27 @@ deferred effort.
   `python3.12`. These are NOT App Sandbox keys (see the Mac App Store plan
   in the Polivoxia vault for the sandboxed build).
 
+## Mac App Store build
+
+`MAS=1 ./build.sh` builds the same app and runtime, then
+`scripts/package-mas.sh` makes a sandboxed, App Store signed
+`src-tauri/target/aarch64-apple-darwin/release/bundle/mas/Tracet-<version>.pkg`
+(`MAS_UPLOAD=1` also validates and uploads it with `xcrun altool`).
+
+- Bundle ID `ca.polivoxia.tracet` for both channels (was `com.tracet.app`
+  up to 0.2.1).
+- Entitlements: `src-tauri/entitlements.mas.plist` (app: sandbox,
+  `network.client` for the model download, user-selected files, app and
+  team identifiers) and `src-tauri/entitlements.mas-child.plist` (the
+  bundled `python3.12`: sandbox + `inherit` only). No hardened runtime.
+- `signing.env` needs `APPLE_MAS_APP_IDENTITY` ("Apple Distribution: ..."),
+  `APPLE_MAS_INSTALLER_IDENTITY` ("3rd Party Mac Developer Installer: ..."),
+  and `MAS_PROVISIONING_PROFILE` (Mac App Store Connect profile for the
+  bundle ID); the script checks the profile matches.
+- Sandbox notes: the Python child reads files the user picked (it inherits
+  the extension); models and temp files land in the container; never spawn
+  system tools (`hardware.rs` uses `sysctlbyname`).
+
 ## License
 
 MIT.

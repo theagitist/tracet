@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Mac App Store build (MAS=1 ./build.sh). App Sandbox instead of the
+      hardened-runtime exceptions in entitlements.plist: under the sandbox
+      the torch stack needs none of them (App Store plan, phase 1).
+      network.client is only for the sidecar's first-run model download.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.application-identifier</key>
+    <string>4MR3G7WGLM.ca.polivoxia.tracet</string>
+    <key>com.apple.developer.team-identifier</key>
+    <string>4MR3G7WGLM</string>
+</dict>
+</plist>
