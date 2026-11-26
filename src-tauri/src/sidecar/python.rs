@@ -56,7 +56,7 @@ pub fn is_runtime_ready(app: &AppHandle) -> bool {
 /// Debug builds use the copy in the runtime build dir when it exists.
 fn diarization_model_dir(app: &AppHandle) -> Option<PathBuf> {
     let models = if cfg!(debug_assertions) {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/runtime/models")
+        dirs::cache_dir()?.join("tracet-build/runtime/models")
     } else {
         app.path().resource_dir().ok()?.join("models")
     };

@@ -86,13 +86,28 @@ APP="src-tauri/target/$TRIPLE/release/bundle/macos/Tracet.app"
 
 echo "==> Building bundled Python runtime"
 scripts/build-runtime.sh
-RUNTIME="$SCRIPT_DIR/src-tauri/target/runtime/python"
-MODELS="$SCRIPT_DIR/src-tauri/target/runtime/models"
+RUNTIME="$HOME/Library/Caches/tracet-build/runtime/python"
+MODELS="$HOME/Library/Caches/tracet-build/runtime/models"
+NOTICES="$HOME/Library/Caches/tracet-build/runtime/THIRD_PARTY_NOTICES.txt"
+
+# iCloud and other sync tools leave "name 2.ext" conflict copies; once,
+# 45,913 of them reached a build. Refuse to ship any.
+check_no_sync_copies() {
+    local found
+    found="$(find "$1" \( -name '* [0-9].*' -o -name '* [0-9]' \) -print | head -5)"
+    if [ -n "$found" ]; then
+        echo "ERROR: sync conflict copies inside $1, e.g.:" >&2
+        echo "$found" >&2
+        exit 1
+    fi
+}
 
 if [ -z "$SIGN_ID" ]; then
     rm -rf "$APP/Contents/Resources/python" "$APP/Contents/Resources/models"
     cp -c -R "$RUNTIME" "$APP/Contents/Resources/python"
     cp -c -R "$MODELS" "$APP/Contents/Resources/models"
+    cp "$NOTICES" "$APP/Contents/Resources/"
+    check_no_sync_copies "$APP"
     echo "No signing identity in signing.env; leaving unsigned bundle at $APP"
     exit 0
 fi
@@ -107,6 +122,8 @@ SAPP="$WORK/Tracet.app"
 rm -rf "$SAPP/Contents/Resources/python" "$SAPP/Contents/Resources/models"
 cp -c -R "$RUNTIME" "$SAPP/Contents/Resources/python"
 cp -c -R "$MODELS" "$SAPP/Contents/Resources/models"
+cp "$NOTICES" "$SAPP/Contents/Resources/"
+check_no_sync_copies "$SAPP"
 xattr -cr "$SAPP"
 
 # Sign inside out instead of --deep: --deep does not treat the hundreds of

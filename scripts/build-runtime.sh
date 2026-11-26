@@ -2,7 +2,8 @@
 # Build the self-contained Python runtime that release builds ship inside
 # Tracet.app/Contents/Resources/python.
 #
-# Usage: scripts/build-runtime.sh [out_dir]   (default: src-tauri/target/runtime)
+# Usage: scripts/build-runtime.sh [out_dir]
+#        (default: ~/Library/Caches/tracet-build/runtime)
 #
 # Why bundle instead of building a venv on the user's Mac: the old first-run
 # setup depended on Homebrew, on whichever `python3` happened to be first on
@@ -18,7 +19,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUT="${1:-$ROOT/src-tauri/target/runtime}"
+# Not inside the project: ~/Documents is iCloud-synced, and iCloud once
+# filled the runtime with 45,913 "name 2.ext" conflict copies that the next
+# build shipped. ~/Library/Caches is never synced.
+CACHE="$HOME/Library/Caches/tracet-build"
+OUT="${1:-$CACHE/runtime}"
 LOCK="$ROOT/sidecar/requirements.lock"
 
 PBS_TAG="20261124"
@@ -26,14 +31,12 @@ PBS_FILE="cpython-3.12.16+${PBS_TAG}-aarch64-apple-darwin-install_only_stripped.
 PBS_SHA256="9d6d9d0d85feda3f9cb4eb3e048f0fed21ed280feda087927eaa4fbc7124826f"
 PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/${PBS_FILE}"
 
-STAMP="$(cat "${BASH_SOURCE[0]}" "$LOCK" | shasum -a 256 | cut -d' ' -f1)"
+STAMP="$(cat "${BASH_SOURCE[0]}" "$SCRIPT_DIR/build-pyav.sh" "$LOCK" | shasum -a 256 | cut -d' ' -f1)"
 if [ -f "$OUT/.stamp" ] && [ "$(cat "$OUT/.stamp")" = "$STAMP" ]; then
     echo "Runtime up to date: $OUT"
     exit 0
 fi
 
-# Keep the download out of the project tree (it is file-synced).
-CACHE="$HOME/Library/Caches/tracet-build"
 mkdir -p "$CACHE"
 if [ ! -f "$CACHE/$PBS_FILE" ]; then
     echo "==> Downloading $PBS_FILE"
@@ -48,9 +51,27 @@ mkdir -p "$OUT"
 tar -xzf "$CACHE/$PBS_FILE" -C "$OUT"
 PY="$OUT/python/bin/python3.12"
 
+# PyAV comes from scripts/build-pyav.sh (decode-only LGPL FFmpeg), not PyPI,
+# whose FFmpeg links the GPL x264/x265 encoders.
+echo "==> Building PyAV against a decode-only LGPL FFmpeg"
+AV_WHEEL="$("$SCRIPT_DIR/build-pyav.sh" "$PY")"
+FFMPEG_LICENSE="$(dirname "$(dirname "$AV_WHEEL")")/ffmpeg/COPYING.LGPLv2.1"
+
 echo "==> Installing locked dependencies"
+grep -v '^av==' "$LOCK" > "$OUT/requirements-no-av.txt"
 PYTHONNOUSERSITE=1 "$PY" -m pip install --no-cache-dir --disable-pip-version-check \
-    --quiet -r "$LOCK"
+    --quiet -r "$OUT/requirements-no-av.txt" "$AV_WHEEL"
+rm "$OUT/requirements-no-av.txt"
+# Fail if a GPL FFmpeg slipped in (e.g. pip replaced the wheel from PyPI).
+PYTHONNOUSERSITE=1 "$PY" - <<'PYEOF'
+import ctypes, glob, os, sys, av
+libs = os.path.join(os.path.dirname(av.__file__), ".dylibs")
+codec = ctypes.CDLL(glob.glob(os.path.join(libs, "libavcodec*.dylib"))[0])
+codec.avcodec_license.restype = ctypes.c_char_p
+lic = codec.avcodec_license().decode()
+if not lic.startswith("LGPL") or glob.glob(os.path.join(libs, "libx26*")):
+    sys.exit(f"PyAV's FFmpeg is not the decode-only LGPL build: {lic}")
+PYEOF
 # Fail the build, not the user's first transcription, if the stack is broken.
 PYTHONNOUSERSITE=1 "$PY" -c "import whisperx, torch, av; from whisperx.diarize import DiarizationPipeline"
 
@@ -120,6 +141,67 @@ import sys, warnings
 warnings.filterwarnings("ignore")
 from whisperx.diarize import DiarizationPipeline
 DiarizationPipeline(model_name=sys.argv[1], token=None, device="cpu")
+PYEOF
+
+# Third-party notices, shipped as Resources/THIRD_PARTY_NOTICES.txt. Each
+# package's own license files stay in its *.dist-info inside the bundle.
+mkdir -p "$OUT/python/licenses"
+cp "$FFMPEG_LICENSE" "$OUT/python/licenses/FFmpeg-LGPL-2.1.txt"
+PYTHONNOUSERSITE=1 "$PY" - "$OUT/THIRD_PARTY_NOTICES.txt" "$DIAR_REV" <<'PYEOF'
+import sys
+from importlib.metadata import distributions
+out, diar_rev = sys.argv[1:3]
+
+def license_of(dist):
+    meta = dist.metadata
+    lic = meta.get("License-Expression") or ""
+    if not lic:
+        raw = (meta.get("License") or "").strip()
+        # Some packages paste the whole license text into this field, or "UNKNOWN".
+        lic = raw if raw and raw != "UNKNOWN" and "\n" not in raw and len(raw) < 80 else ""
+    if not lic:
+        lic = ", ".join(c.split(" :: ")[-1] for c in meta.get_all("Classifier") or []
+                        if c.startswith("License ::"))
+    if not lic:
+        # Fall back to the license file's first line ("MIT License", ...).
+        for f in dist.files or []:
+            if "dist-info" in str(f) and f.name.upper().startswith(("LICENSE", "LICENCE", "COPYING")):
+                first = next((l.strip() for l in f.locate().read_text(errors="replace").splitlines() if l.strip()), "")
+                lic = first[:60]
+                break
+    return lic or "see the license files in its dist-info folder"
+
+pkgs = sorted({(d.metadata["Name"], d.version, license_of(d)) for d in distributions()},
+              key=lambda p: p[0].lower())
+with open(out, "w") as f:
+    f.write(f"""Tracet third-party notices
+
+Tracet itself is MIT licensed: https://github.com/theagitist/tracet
+
+Tracet bundles the following third-party software.
+
+Python 3.12 (python-build-standalone)
+  Python Software Foundation License; text in python/lib/python3.12/LICENSE.txt
+  https://www.python.org/ and https://github.com/astral-sh/python-build-standalone
+
+FFmpeg 8.0.1 (libavcodec, libavformat, libavutil, libavfilter, libavdevice,
+libswresample, libswscale; inside python/lib/python3.12/site-packages/av/.dylibs)
+  GNU Lesser General Public License, version 2.1 or later; text in
+  python/licenses/FFmpeg-LGPL-2.1.txt. Built as a decode-only LGPL library
+  without GPL or nonfree components by scripts/build-pyav.sh in the Tracet
+  repository, from the unmodified source at
+  https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz
+
+pyannote/speaker-diarization-community-1 (revision {diar_rev})
+  by pyannoteAI, Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://huggingface.co/pyannote/speaker-diarization-community-1
+  Redistributed unmodified; see models/.../ATTRIBUTION.txt
+
+Python packages (license files in python/lib/python3.12/site-packages/<name>-<version>.dist-info):
+
+""")
+    for name, version, lic in pkgs:
+        f.write(f"  {name} {version}: {lic}\n")
 PYEOF
 
 echo "$STAMP" > "$OUT/.stamp"
