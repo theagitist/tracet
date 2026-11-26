@@ -64,6 +64,8 @@ if [ -f signing.env ]; then
     if [ -n "${APPLE_API_KEY_PATH:-}" ] && [ -n "${APPLE_API_KEY:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
         NOTARIZE=1
     fi
+    # SKIP_NOTARIZE=1 gives a signed but un-notarized dmg for local testing.
+    [ "${SKIP_NOTARIZE:-0}" = "1" ] && NOTARIZE=0
     # build-runtime.sh needs a HuggingFace token once, to fetch the gated
     # diarization model into its cache; signing.env may provide it.
     [ -n "${HF_TOKEN:-}" ] && export HF_TOKEN
@@ -142,27 +144,18 @@ hdiutil create -volname "Tracet" -srcfolder "$STAGING" -ov -format UDZO "$DMG_TM
 codesign --force --timestamp --sign "$SIGN_ID" "$DMG_TMP"
 
 if [ "$NOTARIZE" -eq 1 ]; then
-    # The bundled runtime makes the upload ~600 MB, and the notary upload
-    # sometimes dies with deadlineExceeded; retry before giving up, and keep
-    # the signed dmg if it still fails so a retry doesn't need a rebuild.
-    echo "==> Submitting to Apple notary service (can take a few minutes)"
-    NOTARIZED=0
-    for attempt in 1 2 3; do
-        if xcrun notarytool submit "$DMG_TMP" \
-            --key "$APPLE_API_KEY_PATH" \
-            --key-id "$APPLE_API_KEY" \
-            --issuer "$APPLE_API_ISSUER" \
-            --wait 2>&1 | tee "$WORK/notary.log" && grep -q 'status: Accepted' "$WORK/notary.log"; then
-            NOTARIZED=1
-            break
-        fi
-        echo "Notarization attempt $attempt failed" >&2
-    done
-    if [ "$NOTARIZED" -ne 1 ]; then
+    # scripts/notarize.py, not `notarytool submit`: notarytool uploads the
+    # ~650 MB dmg over one connection, which some networks throttle to a
+    # crawl; the script uses Apple's Notary API with a parallel S3 upload.
+    # Keep the signed dmg if it still fails, so a retry needs no rebuild.
+    echo "==> Notarizing (uploads ~650 MB)"
+    if ! APPLE_API_KEY="$APPLE_API_KEY" APPLE_API_ISSUER="$APPLE_API_ISSUER" \
+        APPLE_API_KEY_PATH="$APPLE_API_KEY_PATH" python3 scripts/notarize.py "$DMG_TMP"; then
         KEEP="src-tauri/target/$TRIPLE/release/bundle/dmg/Tracet_${VERSION}_${DMG_ARCH}.unnotarized.dmg"
         mkdir -p "$(dirname "$KEEP")"
         cp "$DMG_TMP" "$KEEP"
         echo "ERROR: notarization failed; signed dmg kept at $KEEP" >&2
+        echo "Retry with: scripts/notarize.py $KEEP && xcrun stapler staple $KEEP" >&2
         exit 1
     fi
     echo "==> Stapling ticket"
@@ -175,7 +168,11 @@ fi
 # --- copy finished .dmg back into the repo -----------------------------------
 DMG_DIR="src-tauri/target/$TRIPLE/release/bundle/dmg"
 mkdir -p "$DMG_DIR"
-DMG="$DMG_DIR/Tracet_${VERSION}_${DMG_ARCH}.dmg"
+if [ "$NOTARIZE" -eq 1 ]; then
+    DMG="$DMG_DIR/Tracet_${VERSION}_${DMG_ARCH}.dmg"
+else
+    DMG="$DMG_DIR/Tracet_${VERSION}_${DMG_ARCH}.unnotarized.dmg"
+fi
 cp "$DMG_TMP" "$DMG"
 
 echo ""

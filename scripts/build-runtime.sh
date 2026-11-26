@@ -60,6 +60,10 @@ rm -rf "$STDLIB/test" "$STDLIB/idlelib" "$STDLIB/tkinter" "$STDLIB/turtledemo" \
        "$STDLIB/ensurepip" "$STDLIB/lib-dynload/_tkinter"*.so \
        "$OUT/python/lib/tcl"* "$OUT/python/lib/tk"* "$OUT/python/lib/itcl"* \
        "$OUT/python/lib/thread"* "$OUT/python/share"
+# Packages' own test suites: ~146 MB that users never run, and joblib's
+# test data (.gz pickles) draws "could not be unpacked" notary warnings.
+find "$OUT/python/lib/python3.12/site-packages" -type d \( -name tests -o -name test \) -prune \
+    -exec rm -rf {} +
 # Some wheels ship universal (arm64 + x86_64) binaries; drop the Intel half.
 find "$OUT/python" -type f \( -name '*.so' -o -name '*.dylib' \) -print0 |
     while IFS= read -r -d '' f; do
