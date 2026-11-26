@@ -18,7 +18,8 @@ pub struct SetupStatus {
 /// Check what's installed and what needs setup.
 #[tauri::command]
 pub async fn check_setup_status(app: AppHandle) -> Result<SetupStatus, String> {
-    let ffmpeg_installed = is_command_available("ffmpeg").await;
+    // Media decoding now uses PyAV inside the sidecar; no ffmpeg binary.
+    let ffmpeg_installed = true;
     let venv_ready = python::is_runtime_ready(&app);
     // Once the venv exists the system interpreter no longer matters.
     let python_available = venv_ready || python::find_python_interpreter().await.is_ok();
@@ -44,15 +45,7 @@ pub async fn check_setup_status(app: AppHandle) -> Result<SetupStatus, String> {
 /// Run the full first-time setup.
 #[tauri::command]
 pub async fn run_setup(app: AppHandle) -> Result<String, String> {
-    // Step 1: Check/install FFmpeg
-    emit_setup_progress(&app, "Checking FFmpeg...", 0);
-    if !is_command_available("ffmpeg").await {
-        emit_setup_progress(&app, "Installing FFmpeg via Homebrew...", 5);
-        install_via_brew("ffmpeg").await?;
-    }
-    emit_setup_progress(&app, "FFmpeg ready", 20);
-
-    // Step 2: Check Python
+    // Step 1: Check Python
     emit_setup_progress(&app, "Checking Python...", 25);
     if !python::is_runtime_ready(&app) {
         let interpreter = python::find_python_interpreter().await?;
@@ -60,12 +53,12 @@ pub async fn run_setup(app: AppHandle) -> Result<String, String> {
     }
     emit_setup_progress(&app, "Python ready", 30);
 
-    // Step 3: Set up Python venv with whisperX
+    // Step 2: Set up Python venv with whisperX
     emit_setup_progress(&app, "Installing whisperX and dependencies (this may take a few minutes)...", 40);
     python::setup_venv(&app).await?;
     emit_setup_progress(&app, "whisperX installed", 85);
 
-    // Step 4: Check Ollama (optional: just inform, don't block)
+    // Step 3: Check Ollama (optional: just inform, don't block)
     emit_setup_progress(&app, "Checking Ollama...", 90);
     let ollama_installed = is_command_available("ollama").await;
     if !ollama_installed {
@@ -98,28 +91,6 @@ async fn is_command_available(cmd: &str) -> bool {
         .unwrap_or(false)
 }
 
-
-async fn install_via_brew(package: &str) -> Result<(), String> {
-    if !is_command_available("brew").await {
-        return Err(format!(
-            "{} is not installed and Homebrew is not available. Please install {} manually.",
-            package, package
-        ));
-    }
-
-    let output = Command::new("brew")
-        .args(["install", package])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run brew install: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("brew install {} failed: {}", package, stderr));
-    }
-
-    Ok(())
-}
 
 async fn run_command(cmd: &str, args: &[&str]) -> Result<String, String> {
     let output = Command::new(cmd)

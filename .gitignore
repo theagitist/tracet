@@ -4,6 +4,7 @@ src-tauri/target/
 models/*.bin
 models/*.gguf
 sidecar/.venv/
+__pycache__/
 .DS_Store
 *.log
 

@@ -28,6 +28,12 @@ def main():
     # Force all Python logging output to stderr: many ML libraries default to
     # stdout, which corrupts our JSON-over-stdout protocol.
     logging.basicConfig(stream=sys.stderr, force=True)
+    # pyannote imports torchcodec, which looks for a system FFmpeg and warns
+    # loudly when there isn't one. Tracet never uses it (audio is passed in
+    # memory, decoded by PyAV), and the warning would reach the UI.
+    import warnings
+
+    warnings.filterwarnings("ignore", message=r"(?s).*torchcodec is not installed correctly")
 
     for line in sys.stdin:
         line = line.strip()
@@ -140,7 +146,9 @@ def run_transcription(
 
     progress(45, "Transcribing audio")
     start_heartbeat(45, "Transcribing audio")
-    audio = whisperx.load_audio(wav_path)
+    from audio_io import load_audio
+
+    audio = load_audio(wav_path)
     result = model.transcribe(audio, batch_size=16)
     stop_heartbeat()
 

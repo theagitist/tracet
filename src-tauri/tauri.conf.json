@@ -45,6 +45,8 @@
     ],
     "resources": {
       "../sidecar/diarize.py": "sidecar/diarize.py",
+      "../sidecar/audio_io.py": "sidecar/audio_io.py",
+      "../sidecar/convert.py": "sidecar/convert.py",
       "../sidecar/requirements.txt": "sidecar/requirements.txt"
     },
     "macOS": {
