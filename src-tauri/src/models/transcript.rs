@@ -60,24 +60,18 @@ pub struct DiarizationSegment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineOptions {
     pub whisper_model: String,
-    pub enable_llm_review: bool,
     pub language: Option<String>,
     pub confidence_threshold: f32,
     pub hf_token: Option<String>,
-    pub ollama_model: Option<String>,
-    pub ollama_url: Option<String>,
 }
 
 impl Default for PipelineOptions {
     fn default() -> Self {
         Self {
             whisper_model: "large-v3".to_string(),
-            enable_llm_review: true,
             language: None,
             confidence_threshold: 0.7,
             hf_token: None,
-            ollama_model: Some("llama3.1:8b".to_string()),
-            ollama_url: None,
         }
     }
 }

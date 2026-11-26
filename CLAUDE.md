@@ -9,8 +9,9 @@ Tracet is a local desktop transcription app: **Tauri v2** shell with a
 running **whisperX** for transcription, alignment, and pyannote speaker
 diarization, and **PyAV** for media conversion. Release builds ship their own
 Python runtime and the diarization model inside the `.app`, so users install
-nothing else. Optional LLM accuracy review is provided via a local Ollama
-instance over HTTP. Quality is the top priority for technical decisions
+nothing else. The optional Ollama LLM review was removed after 0.2.0 (it had
+no UI switch, needed a separate install, and was the only path that could
+send transcript text off the machine). Quality is the top priority for technical decisions
 unless explicitly traded against performance.
 
 Target platform: macOS on Apple Silicon only (decided 2026-11-25 for
@@ -27,7 +28,6 @@ not supported (a Windows plan exists in the Polivoxia vault).
 | State       | Zustand                                       |
 | Transcribe  | whisperX (Python sidecar)                     |
 | Diarize     | pyannote-audio (inside whisperX)              |
-| LLM review  | Ollama HTTP API                               |
 | Conversion  | PyAV (FFmpeg's libraries) in `convert.py`     |
 | Runtime     | python-build-standalone 3.12, bundled         |
 | Project I/O | `zip` crate, `.tracet` bundle = zip archive   |
@@ -72,17 +72,16 @@ or `node` are on PATH. Use `./dev.sh`, or the binaries under
   - `transcribe.rs`: drives the whisperX sidecar, parses results, applies
     auto-flagging heuristics
   - `diarize.rs`: currently a stub (whisperX handles diarization inline)
-  - `review.rs`: Ollama LLM coherence review (graceful fallback when
-    Ollama isn't reachable)
   - `export.rs`: `.txt` / `.md` / `.ai.md` formatting (the AI-friendly
     variant has fixed structure: YAML frontmatter, numbered segments,
     inline strikethrough for very-low-confidence words)
   - `project.rs`: `save_project` / `load_project` for `.tracet` bundles
   - `setup.rs`: setup status and the dev-only venv installer (release builds
-    report ready because the runtime is bundled), Ollama checks
-  - `hardware.rs`: chip / RAM detection, model profile filtering
+    report ready because the runtime is bundled)
+  - `hardware.rs`: chip / RAM detection via `sysctlbyname` (no
+    subprocesses, so it works under the App Sandbox), model profile filtering
 - `pipeline/orchestrator.rs`: `run_pipeline` top-level command,
-  composes convert + transcribe + review
+  composes convert + transcribe (whisperX does diarization inline)
 - `sidecar/python.rs`: the one place that resolves sidecar paths. Release:
   scripts from `Resources/sidecar`, interpreter
   `Resources/python/bin/python3.12`, model `Resources/models/`. Debug: the
@@ -162,7 +161,7 @@ or `node` are on PATH. Use `./dev.sh`, or the binaries under
 The pipeline emits `pipeline:progress` events shaped like:
 
 ```ts
-{ step: "converting" | "transcribing" | "diarizing" | "reviewing" | "done",
+{ step: "converting" | "transcribing" | "diarizing" | "done",
   percent: 0..100,
   message: string }
 ```

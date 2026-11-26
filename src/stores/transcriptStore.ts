@@ -11,7 +11,6 @@ type ProcessingState =
   | "converting"
   | "transcribing"
   | "diarizing"
-  | "reviewing"
   | "done"
   | "error";
 
@@ -107,7 +106,6 @@ export const useTranscriptStore = create<TranscriptStore>((set) => ({
         converting: "converting",
         transcribing: "transcribing",
         diarizing: "diarizing",
-        reviewing: "reviewing",
         done: "done",
       };
       // percent === 0 is a sentinel meaning "keep current percent, just update message".

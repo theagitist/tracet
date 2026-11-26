@@ -1,14 +1,12 @@
 use tauri::{AppHandle, Emitter};
 
 use crate::commands::convert::{convert_media, get_duration_ms};
-use crate::commands::review::review_transcript;
 use crate::commands::transcribe::transcribe_audio;
 use crate::models::transcript::{PipelineOptions, PipelineProgress, Transcript};
 
 /// Run the full transcription pipeline:
-/// 1. Convert media to WAV (FFmpeg)
+/// 1. Convert media to WAV (PyAV)
 /// 2. Transcribe + align + diarize (whisperX, single pass)
-/// 3. Review with LLM (Ollama, optional)
 #[tauri::command]
 pub async fn run_pipeline(
     app: AppHandle,
@@ -28,7 +26,7 @@ pub async fn run_pipeline(
         .unwrap_or_else(|| input_path.clone());
 
     // Step 2: Transcribe + align + diarize in one pass via whisperX
-    let mut transcript = transcribe_audio(
+    let transcript = transcribe_audio(
         app.clone(),
         wav_path,
         source_file,
@@ -38,35 +36,6 @@ pub async fn run_pipeline(
         options.hf_token,
     )
     .await?;
-
-    // Step 3: LLM review (optional, requires Ollama running)
-    if options.enable_llm_review {
-        if let Some(ref ollama_model) = options.ollama_model {
-            match review_transcript(
-                app.clone(),
-                transcript.segments.clone(),
-                ollama_model.clone(),
-                options.ollama_url.clone(),
-            )
-            .await
-            {
-                Ok(reviewed_segments) => {
-                    transcript.segments = reviewed_segments;
-                }
-                Err(e) => {
-                    log::warn!("LLM review failed, continuing without it: {}", e);
-                    let _ = app.emit(
-                        "pipeline:progress",
-                        PipelineProgress {
-                            step: "reviewing".to_string(),
-                            percent: 100,
-                            message: format!("Review skipped: {}", e),
-                        },
-                    );
-                }
-            }
-        }
-    }
 
     // Done
     app.emit(

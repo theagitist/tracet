@@ -17,8 +17,7 @@ Everything runs on your machine: no cloud APIs.
 - **Inline editing**: click any text to fix it, edits persist and appear in
   exports
 - **Hardware-aware model selection**: settings detect your chip and RAM, then
-  filter Whisper and Ollama model options to what your machine can actually run
-- **Optional LLM accuracy review** via Ollama (any local model)
+  filter the Whisper model options to what your machine can actually run
 - **`.tracet` project bundles**: save a zip containing the converted audio
   + transcript so you can transcribe on a powerful machine and edit elsewhere
 - **Three export formats**:
@@ -33,7 +32,7 @@ Everything runs on your machine: no cloud APIs.
 ```mermaid
 flowchart TB
     FE["<b>React + TypeScript + Tailwind CSS frontend</b><br/>Vite, served by Tauri webview"]
-    BE["<b>Rust backend (Tauri v2)</b><br/>Pipeline orchestrator<br/>Python sidecar manager<br/>Ollama HTTP client (LLM review)<br/>.tracet zip pack/unpack"]
+    BE["<b>Rust backend (Tauri v2)</b><br/>Pipeline orchestrator<br/>Python sidecar manager<br/>.tracet zip pack/unpack"]
     SC["<b>Python sidecar (bundled Python 3.12 runtime)</b><br/>PyAV media conversion<br/>whisperX (faster-whisper backend)<br/>wav2vec2 phoneme alignment<br/>pyannote speaker diarization"]
 
     FE -- "Tauri IPC" --> BE
@@ -46,7 +45,6 @@ flowchart TB
 - About 1.3 GB of disk for the app, plus room for the speech model it
   downloads on first use (about 1.6 GB for the default `large-v3-turbo`)
 - An internet connection the first time each speech model is used
-- Optional: Ollama (https://ollama.ai) for LLM-based accuracy review
 
 Intel Macs are not supported from 0.2.0 on: PyTorch no longer publishes
 Intel macOS builds, and the transcription stack needs a current one.
@@ -107,15 +105,6 @@ run.
 Speaker diarization works out of the box: the pyannote model ships inside
 the app, so no HuggingFace account or token is needed.
 
-For LLM-based review, install Ollama and pull a model:
-
-```bash
-brew install ollama
-ollama pull llama3.1:8b
-```
-
-Then enable LLM review in Settings.
-
 ## Privacy
 
 Tracet is privacy-first by design. Audio files, transcripts, and saved
@@ -123,23 +112,15 @@ Tracet is privacy-first by design. Audio files, transcripts, and saved
 telemetry, no analytics, no crash reporting, and no auto-updater. The
 app does not phone home.
 
-There are exactly two places where the app makes network requests:
+The only network requests the app makes are the model downloads on first
+use:
 
-1. **Whisper model download on first run.** The speech recognition and
+- **Whisper model download on first run.** The speech recognition and
    word-alignment weights are downloaded from HuggingFace and the Torch Hub
    the first time you transcribe. These are one-way downloads (no audio or
    transcript data is sent, and no account or token is used), and once
    cached, transcription works fully offline. The speaker diarization model
    ships inside the app, so it needs no download at all.
-2. **Ollama LLM review (optional, local by default).** When LLM review is
-   enabled, transcript text is sent to whatever URL the **Ollama URL**
-   setting points at. The default is `http://localhost:11434`, so the
-   data stays on this machine. If you change that URL to a non-local
-   host (anything other than `localhost`, `127.0.0.1`, `::1`, or
-   `0.0.0.0`), every transcript segment Tracet reviews will be sent in
-   plaintext to that host. Settings detects this case, shows a red
-   warning, and requires you to type `I understand` to apply the change.
-   Keep the URL on `localhost` to preserve the privacy guarantee.
 
 Things that explicitly do NOT happen:
 
@@ -152,11 +133,11 @@ Things that explicitly do NOT happen:
 - The webview only loads bundled local assets; no third-party scripts
   are fetched at runtime.
 
-If you want to verify any of this, the only outbound HTTP code paths
-are `src-tauri/src/commands/setup.rs` (Ollama health check), and
-`src-tauri/src/commands/review.rs` (Ollama generate call); plus the
-model downloads inside the Python sidecar (`sidecar/diarize.py`, through
-faster-whisper and whisperX).
+If you want to verify any of this: the Rust backend has no HTTP client at
+all, and the only outbound requests are the model downloads inside the
+Python sidecar (`sidecar/diarize.py`, through faster-whisper and
+whisperX). Until 0.2.0 Tracet also had an optional Ollama LLM review; it
+was removed in 0.2.1.
 
 ## Project layout
 
@@ -210,7 +191,6 @@ Tracet wires together excellent open-source work:
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper): CTranslate2
   Whisper backend
-- [Ollama](https://ollama.ai): local LLM runtime
 - [Tauri](https://tauri.app): desktop shell
 - [PyAV](https://github.com/PyAV-Org/PyAV) and [FFmpeg](https://ffmpeg.org):
   media decoding

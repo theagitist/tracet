@@ -5,9 +5,8 @@ mod sidecar;
 
 /// When launched from Finder/launchd, the app inherits a minimal PATH
 /// (`/usr/bin:/bin:/usr/sbin:/sbin`) without Homebrew or user-local
-/// directories. Tools like `ffmpeg`, `brew`, `python3` (when installed
-/// via Homebrew), and `ollama` then look missing even though they work
-/// fine from a terminal. Prepend the well-known macOS bin dirs so every
+/// directories. A Homebrew `python3` (which the dev build's venv setup
+/// looks for) then looks missing even though it works from a terminal. Prepend the well-known macOS bin dirs so every
 /// subprocess we spawn can find them.
 fn augment_path_for_gui_launch() {
     let extras = [
@@ -49,18 +48,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::audio::read_audio_file,
             commands::convert::convert_media,
             commands::transcribe::transcribe_audio,
-            commands::review::review_transcript,
             commands::export::export_transcript,
             commands::hardware::detect_hardware,
             commands::hardware::get_available_profiles,
             commands::setup::check_setup_status,
             commands::setup::run_setup,
-            commands::setup::install_ollama,
             commands::project::save_project,
             commands::project::load_project,
             pipeline::orchestrator::run_pipeline,

@@ -4,10 +4,9 @@ const STEP_LABELS: Record<string, string> = {
   converting: "Converting media",
   transcribing: "Transcribing audio",
   diarizing: "Identifying speakers",
-  reviewing: "Reviewing accuracy",
 };
 
-const STEPS = ["converting", "transcribing", "diarizing", "reviewing"];
+const STEPS = ["converting", "transcribing", "diarizing"];
 
 export function ProgressIndicator() {
   const processingState = useTranscriptStore((s) => s.processingState);

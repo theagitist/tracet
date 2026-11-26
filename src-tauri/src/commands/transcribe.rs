@@ -290,9 +290,8 @@ pub async fn transcribe_audio(
                 .and_then(|w| w.speaker.clone())
                 .or(seg.speaker.clone());
 
-            // Auto-flag segments that look likely to be incorrect, even when
-            // LLM review is disabled. We use heuristics over the word-level
-            // confidence scores from whisperX.
+            // Auto-flag segments that look likely to be incorrect, using
+            // heuristics over the word-level confidence scores from whisperX.
             let very_low_count = token_confidences
                 .iter()
                 .filter(|t| t.confidence < 0.3)

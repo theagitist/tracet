@@ -56,13 +56,10 @@ export function useTranscription() {
     try {
       const options: PipelineOptions = {
         whisper_model: settings.whisperModel,
-        enable_llm_review: settings.enableLlmReview,
         language: null,
         confidence_threshold: 0.7,
         // The diarization model ships with the app; no token needed.
         hf_token: null,
-        ollama_model: settings.ollamaModel,
-        ollama_url: settings.ollamaUrl,
       };
 
       const transcript = await invoke<Transcript>("run_pipeline", {

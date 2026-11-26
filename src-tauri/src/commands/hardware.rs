@@ -1,13 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::ffi::CString;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareInfo {
     pub ram_gb: u64,
     pub chip: String,
     pub chip_tier: ChipTier,
-    pub gpu_cores: Option<u32>,
-    pub model_name: String,
 }
 
 /// Simplified tier for deciding which models are viable.
@@ -34,34 +32,39 @@ pub fn detect_hardware() -> Result<HardwareInfo, String> {
 
     let chip_tier = classify_chip(&chip);
 
-    let gpu_cores = get_gpu_cores();
-
-    let model_name = get_model_name().unwrap_or_else(|| "Mac".to_string());
-
     Ok(HardwareInfo {
         ram_gb,
         chip,
         chip_tier,
-        gpu_cores,
-        model_name,
     })
 }
 
+// sysctlbyname instead of running `sysctl`: no subprocess, which also keeps
+// this working inside the App Sandbox.
+fn sysctl_raw(key: &str) -> Option<Vec<u8>> {
+    let name = CString::new(key).ok()?;
+    let mut len: libc::size_t = 0;
+    let rc = unsafe { libc::sysctlbyname(name.as_ptr(), std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0) };
+    if rc != 0 || len == 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; len];
+    let rc = unsafe { libc::sysctlbyname(name.as_ptr(), buf.as_mut_ptr().cast(), &mut len, std::ptr::null_mut(), 0) };
+    if rc != 0 {
+        return None;
+    }
+    buf.truncate(len);
+    Some(buf)
+}
+
 fn sysctl_u64(key: &str) -> Option<u64> {
-    let output = Command::new("sysctl")
-        .args(["-n", key])
-        .output()
-        .ok()?;
-    let s = String::from_utf8_lossy(&output.stdout);
-    s.trim().parse().ok()
+    let buf = sysctl_raw(key)?;
+    Some(u64::from_ne_bytes(buf.get(..8)?.try_into().ok()?))
 }
 
 fn sysctl_string(key: &str) -> Option<String> {
-    let output = Command::new("sysctl")
-        .args(["-n", key])
-        .output()
-        .ok()?;
-    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let buf = sysctl_raw(key)?;
+    let s = String::from_utf8_lossy(&buf).trim_end_matches('\0').trim().to_string();
     if s.is_empty() { None } else { Some(s) }
 }
 
@@ -78,39 +81,6 @@ fn classify_chip(chip: &str) -> ChipTier {
     } else {
         ChipTier::Other
     }
-}
-
-fn get_gpu_cores() -> Option<u32> {
-    let output = Command::new("system_profiler")
-        .args(["SPDisplaysDataType"])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    // Look for "Total Number of Cores: 18" or similar
-    for line in text.lines() {
-        if line.contains("Total Number of Cores") {
-            let parts: Vec<&str> = line.split(':').collect();
-            if let Some(num_str) = parts.get(1) {
-                return num_str.trim().parse().ok();
-            }
-        }
-    }
-    None
-}
-
-fn get_model_name() -> Option<String> {
-    let output = Command::new("system_profiler")
-        .args(["SPHardwareDataType"])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("Model Name:") {
-            return Some(trimmed.replace("Model Name:", "").trim().to_string());
-        }
-    }
-    None
 }
 
 /// Given hardware info, return which model profiles are available.
@@ -181,66 +151,6 @@ pub fn get_available_profiles(hardware: HardwareInfo) -> Vec<ModelProfile> {
         available: ram >= 12,
     });
 
-    // --- Ollama models ---
-    // 8GB machines: only small models
-    profiles.push(ModelProfile {
-        category: ProfileCategory::Ollama,
-        id: "llama3.2:3b".to_string(),
-        name: "Llama 3.2 3B".to_string(),
-        quality_stars: 2,
-        speed_label: "Very Fast".to_string(),
-        estimated_realtime_factor: "~50 tokens/sec".to_string(),
-        ram_required_gb: 4,
-        shortcomings: vec![
-            "Limited reasoning: may miss subtle transcription errors".to_string(),
-            "Less reliable JSON output".to_string(),
-        ],
-        available: true,
-    });
-
-    profiles.push(ModelProfile {
-        category: ProfileCategory::Ollama,
-        id: "llama3.1:8b".to_string(),
-        name: "Llama 3.1 8B".to_string(),
-        quality_stars: 3,
-        speed_label: "Fast".to_string(),
-        estimated_realtime_factor: "~30 tokens/sec".to_string(),
-        ram_required_gb: 6,
-        shortcomings: vec![
-            "Good at catching obvious errors".to_string(),
-            "May miss context-dependent mistakes".to_string(),
-        ],
-        available: ram >= 8,
-    });
-
-    // 16GB+ for 14B class models
-    profiles.push(ModelProfile {
-        category: ProfileCategory::Ollama,
-        id: "qwen2.5:14b".to_string(),
-        name: "Qwen 2.5 14B".to_string(),
-        quality_stars: 4,
-        speed_label: "Moderate".to_string(),
-        estimated_realtime_factor: "~15 tokens/sec".to_string(),
-        ram_required_gb: 12,
-        shortcomings: vec![
-            "Strong reasoning, good at context-dependent corrections".to_string(),
-        ],
-        available: ram >= 16,
-    });
-
-    // 18GB+ (like our M3 Pro) for the top tier we'll support
-    profiles.push(ModelProfile {
-        category: ProfileCategory::Ollama,
-        id: "qwen2.5:32b".to_string(),
-        name: "Qwen 2.5 32B".to_string(),
-        quality_stars: 5,
-        speed_label: "Slow".to_string(),
-        estimated_realtime_factor: "~8 tokens/sec".to_string(),
-        ram_required_gb: 18,
-        shortcomings: vec![],
-        available: ram >= 18,
-    });
-
     // --- Diarization note: pyannote always runs, no model choice needed ---
 
     profiles
@@ -264,5 +174,14 @@ pub struct ModelProfile {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ProfileCategory {
     Whisper,
-    Ollama,
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn reads_ram_and_chip_without_subprocesses() {
+        let hw = super::detect_hardware().unwrap();
+        assert!(hw.ram_gb > 0);
+        assert!(hw.chip.starts_with("Apple") || hw.chip.contains("Intel"), "{}", hw.chip);
+    }
 }

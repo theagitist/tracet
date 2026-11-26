@@ -16,8 +16,6 @@ interface SetupStatus {
   ffmpeg_installed: boolean;
   python_available: boolean;
   venv_ready: boolean;
-  ollama_installed: boolean;
-  ollama_running: boolean;
   needs_setup: boolean;
 }
 

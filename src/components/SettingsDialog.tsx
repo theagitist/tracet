@@ -1,41 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Download,
   Loader2,
-  ExternalLink,
   Star,
   Cpu,
-  AlertTriangle,
   Zap,
   Crown,
-  ShieldAlert,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import type { HardwareInfo, ModelProfile } from "../types/transcript";
 import { loadSettings, saveSettings } from "../lib/settings";
-
-const DEFAULT_OLLAMA_URL = "http://localhost:11434";
-const REMOTE_CONFIRM_PHRASE = "I understand";
-
-const LOCAL_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "[::1]",
-]);
-
-function isLocalOllamaUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return LOCAL_HOSTS.has(parsed.hostname);
-  } catch {
-    // Unparseable means the user is mid-typing. Treat as local so we don't
-    // prematurely scream "remote" while they're still typing the protocol.
-    return true;
-  }
-}
 
 interface Props {
   onClose: () => void;
@@ -46,55 +21,13 @@ export function SettingsDialog({ onClose }: Props) {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [profiles, setProfiles] = useState<ModelProfile[]>([]);
   const [selectedWhisper, setSelectedWhisper] = useState(initial.whisperModel);
-  const [selectedOllama, setSelectedOllama] = useState(initial.ollamaModel);
-  const [ollamaUrl, setOllamaUrl] = useState(initial.ollamaUrl);
-  const [ollamaUrlDraft, setOllamaUrlDraft] = useState(initial.ollamaUrl);
-  const [remoteConfirmText, setRemoteConfirmText] = useState("");
-  const [enableLlmReview] = useState(initial.enableLlmReview);
-  const [ollamaStatus, setOllamaStatus] = useState<
-    "checking" | "connected" | "disconnected"
-  >("checking");
   const [pythonReady, setPythonReady] = useState<boolean | null>(null);
   const [settingUpPython, setSettingUpPython] = useState(false);
 
   // Persist any change immediately so the next pipeline run picks them up.
   useEffect(() => {
-    saveSettings({
-      whisperModel: selectedWhisper,
-      ollamaModel: selectedOllama,
-      ollamaUrl,
-      enableLlmReview,
-    });
-  }, [selectedWhisper, selectedOllama, ollamaUrl, enableLlmReview]);
-
-  // The Ollama URL is the only setting that can leak transcript text off the
-  // machine. Only commit the draft to the active value when it's local, or
-  // when the user has typed the confirmation phrase verbatim.
-  const draftIsLocal = useMemo(
-    () => isLocalOllamaUrl(ollamaUrlDraft),
-    [ollamaUrlDraft],
-  );
-  const draftConfirmed =
-    remoteConfirmText.trim().toLowerCase() ===
-    REMOTE_CONFIRM_PHRASE.toLowerCase();
-  const draftDiffers = ollamaUrlDraft !== ollamaUrl;
-  const needsRemoteConfirmation = draftDiffers && !draftIsLocal;
-
-  useEffect(() => {
-    if (!draftDiffers) return;
-    if (draftIsLocal || draftConfirmed) {
-      setOllamaUrl(ollamaUrlDraft);
-      setRemoteConfirmText("");
-    }
-  }, [draftDiffers, draftIsLocal, draftConfirmed, ollamaUrlDraft]);
-
-  const draftHostname = useMemo(() => {
-    try {
-      return new URL(ollamaUrlDraft).hostname || ollamaUrlDraft;
-    } catch {
-      return ollamaUrlDraft;
-    }
-  }, [ollamaUrlDraft]);
+    saveSettings({ whisperModel: selectedWhisper });
+  }, [selectedWhisper]);
 
   useEffect(() => {
     // Detect hardware and get available profiles
@@ -110,13 +43,6 @@ export function SettingsDialog({ onClose }: Props) {
       .catch(() => setPythonReady(false));
   }, []);
 
-  useEffect(() => {
-    setOllamaStatus("checking");
-    fetch(`${ollamaUrl}/api/tags`)
-      .then((r) => setOllamaStatus(r.ok ? "connected" : "disconnected"))
-      .catch(() => setOllamaStatus("disconnected"));
-  }, [ollamaUrl]);
-
   const handleSetupPython = async () => {
     setSettingUpPython(true);
     try {
@@ -130,7 +56,6 @@ export function SettingsDialog({ onClose }: Props) {
   };
 
   const whisperProfiles = profiles.filter((p) => p.category === "Whisper");
-  const ollamaProfiles = profiles.filter((p) => p.category === "Ollama");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -153,13 +78,10 @@ export function SettingsDialog({ onClose }: Props) {
             <Cpu size={18} className="shrink-0 text-[var(--color-accent)]" />
             <div>
               <div className="text-sm font-medium text-[var(--color-text)]">
-                {hardware.model_name} &mdash; {hardware.chip}
+                {hardware.chip}
               </div>
               <div className="text-xs text-[var(--color-text-muted)]">
                 {hardware.ram_gb} GB RAM
-                {hardware.gpu_cores
-                  ? ` \u00B7 ${hardware.gpu_cores}-core GPU`
-                  : ""}
                 {" \u00B7 "}
                 Model options filtered for your hardware
               </div>
@@ -231,135 +153,6 @@ export function SettingsDialog({ onClose }: Props) {
                 }}
               />
             ))}
-          </div>
-        </section>
-
-        {/* Ollama LLM review */}
-        <section className="mb-5">
-          <div className="mb-1 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-[var(--color-text)]">
-              Accuracy Review Model (Ollama)
-            </h3>
-            <div className="flex items-center gap-2">
-              <StatusDot
-                status={
-                  ollamaStatus === "checking"
-                    ? "checking"
-                    : ollamaStatus === "connected"
-                      ? "ok"
-                      : "error"
-                }
-              />
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {ollamaStatus === "connected"
-                  ? "Connected"
-                  : ollamaStatus === "checking"
-                    ? "Checking..."
-                    : "Not running"}
-              </span>
-            </div>
-          </div>
-
-          {ollamaStatus === "disconnected" && (
-            <div className="mb-3 flex items-start gap-2 rounded border border-yellow-500/20 bg-yellow-500/5 px-3 py-2">
-              <AlertTriangle
-                size={14}
-                className="mt-0.5 shrink-0 text-[var(--color-warning)]"
-              />
-              <div className="text-xs text-[var(--color-text-muted)]">
-                Ollama is not running. Review will fall back to
-                confidence-based flagging only.{" "}
-                <a
-                  href="https://ollama.ai"
-                  target="_blank"
-                  rel="noopener"
-                  className="inline-flex items-center gap-0.5 text-[var(--color-accent)] hover:underline"
-                >
-                  Install Ollama <ExternalLink size={10} />
-                </a>
-              </div>
-            </div>
-          )}
-
-          <p className="mb-3 text-xs text-[var(--color-text-muted)]">
-            A local LLM reviews the transcript for errors. Larger models catch
-            more subtle mistakes. Ollama is free and runs locally.
-          </p>
-
-          <div className="space-y-2">
-            {ollamaProfiles.map((profile) => (
-              <ModelCard
-                key={profile.id}
-                profile={profile}
-                selected={selectedOllama === profile.id}
-                onSelect={() => {
-                  if (profile.available) setSelectedOllama(profile.id);
-                }}
-              />
-            ))}
-          </div>
-
-          <div className="mt-3">
-            <label className="mb-1 block text-xs text-[var(--color-text-muted)]">
-              Ollama URL
-            </label>
-            <input
-              type="text"
-              value={ollamaUrlDraft}
-              onChange={(e) => setOllamaUrlDraft(e.target.value)}
-              className={`w-full rounded border bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] outline-none ${
-                needsRemoteConfirmation
-                  ? "border-red-500/60 focus:border-red-500"
-                  : "border-[var(--color-border)] focus:border-[var(--color-accent)]"
-              }`}
-            />
-            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
-              Default <code>{DEFAULT_OLLAMA_URL}</code> keeps every transcript
-              on this machine. A non-local URL sends transcript text off your
-              device.
-            </p>
-
-            {needsRemoteConfirmation && (
-              <div className="mt-3 rounded border-2 border-red-500/70 bg-red-500/10 p-3">
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-300">
-                  <ShieldAlert size={16} className="shrink-0" />
-                  This breaks the privacy guarantee
-                </div>
-                <p className="mb-2 text-xs leading-relaxed text-red-100/90">
-                  Pointing Ollama at <code>{draftHostname}</code> means every
-                  segment of every transcript you review will be sent there in
-                  plaintext over the network. Tracet was designed to keep
-                  recordings on your machine. We strongly recommend keeping the
-                  URL at <code>{DEFAULT_OLLAMA_URL}</code> and running Ollama
-                  locally.
-                </p>
-                <p className="mb-2 text-xs text-red-100/90">
-                  If you understand and still want this, type{" "}
-                  <code className="rounded bg-black/30 px-1">
-                    {REMOTE_CONFIRM_PHRASE}
-                  </code>{" "}
-                  below to apply the change.
-                </p>
-                <input
-                  type="text"
-                  value={remoteConfirmText}
-                  onChange={(e) => setRemoteConfirmText(e.target.value)}
-                  placeholder={`Type "${REMOTE_CONFIRM_PHRASE}" to confirm`}
-                  className="w-full rounded border border-red-500/40 bg-black/20 px-3 py-2 text-sm text-[var(--color-text)] placeholder-red-300/40 outline-none focus:border-red-400"
-                />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    onClick={() => {
-                      setOllamaUrlDraft(DEFAULT_OLLAMA_URL);
-                      setRemoteConfirmText("");
-                    }}
-                    className="text-xs font-medium text-red-200 hover:text-red-100 hover:underline"
-                  >
-                    Revert to localhost
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </section>
 

@@ -4,29 +4,28 @@
 
 export interface UserSettings {
   whisperModel: string;
-  ollamaModel: string;
-  ollamaUrl: string;
-  enableLlmReview: boolean;
 }
 
 const KEY = "tracet:settings";
 
 const DEFAULTS: UserSettings = {
   whisperModel: "large-v3-turbo",
-  ollamaModel: "llama3.1:8b",
-  ollamaUrl: "http://localhost:11434",
-  enableLlmReview: false,
 };
 
 export function loadSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULTS };
-    // Up to 0.1.x the HuggingFace token was stored here in plain text. The
-    // diarization model now ships with the app, so erase it from storage.
-    const { hfToken, ...parsed } = JSON.parse(raw);
-    if (hfToken !== undefined) localStorage.setItem(KEY, JSON.stringify(parsed));
-    return { ...DEFAULTS, ...parsed };
+    // Keep only known keys. This erases the HuggingFace token that 0.1.x
+    // stored here in plain text and the Ollama settings dropped in 0.2.1.
+    const stored = JSON.parse(raw);
+    const settings: UserSettings = {
+      whisperModel: stored.whisperModel ?? DEFAULTS.whisperModel,
+    };
+    if (Object.keys(stored).length !== 1 || !("whisperModel" in stored)) {
+      localStorage.setItem(KEY, JSON.stringify(settings));
+    }
+    return settings;
   } catch {
     return { ...DEFAULTS };
   }

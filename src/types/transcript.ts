@@ -37,12 +37,9 @@ export interface Transcript {
 
 export interface PipelineOptions {
   whisper_model: string;
-  enable_llm_review: boolean;
   language: string | null;
   confidence_threshold: number;
   hf_token: string | null;
-  ollama_model: string | null;
-  ollama_url: string | null;
 }
 
 export interface PipelineProgress {
@@ -65,11 +62,9 @@ export interface HardwareInfo {
   ram_gb: number;
   chip: string;
   chip_tier: ChipTier;
-  gpu_cores: number | null;
-  model_name: string;
 }
 
-export type ProfileCategory = "Whisper" | "Ollama";
+export type ProfileCategory = "Whisper";
 
 export interface ModelProfile {
   category: ProfileCategory;

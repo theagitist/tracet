@@ -4,7 +4,6 @@ import {
   X,
   Loader2,
   Download,
-  ExternalLink,
   AlertTriangle,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -15,8 +14,6 @@ interface SetupStatus {
   ffmpeg_installed: boolean;
   python_available: boolean;
   venv_ready: boolean;
-  ollama_installed: boolean;
-  ollama_running: boolean;
   needs_setup: boolean;
 }
 
@@ -121,12 +118,6 @@ export function SetupScreen({ onComplete, onClose }: Props) {
             detail="Transcription, alignment, speaker diarization"
             installed={status.venv_ready}
           />
-          <CheckItem
-            label="Ollama"
-            detail="LLM accuracy review (optional)"
-            installed={status.ollama_installed}
-            optional
-          />
         </div>
 
         {/* Progress bar when running */}
@@ -185,26 +176,6 @@ export function SetupScreen({ onComplete, onClose }: Props) {
             )}
           </button>
         </div>
-
-        {!status.ollama_installed && (
-          <div className="mt-4 rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-            <p className="text-xs text-[var(--color-text-muted)]">
-              For LLM-powered accuracy review, install Ollama separately:{" "}
-              <a
-                href="https://ollama.ai"
-                target="_blank"
-                rel="noopener"
-                className="inline-flex items-center gap-0.5 text-[var(--color-accent)] hover:underline"
-              >
-                ollama.ai <ExternalLink size={10} />
-              </a>{" "}
-              then run{" "}
-              <code className="rounded bg-[var(--color-surface)] px-1">
-                ollama pull llama3.1:8b
-              </code>
-            </p>
-          </div>
-        )}
     </div>
   );
 }

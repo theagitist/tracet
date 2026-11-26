@@ -4,6 +4,5 @@ pub mod diarize;
 pub mod export;
 pub mod hardware;
 pub mod project;
-pub mod review;
 pub mod setup;
 pub mod transcribe;
