@@ -1,4 +1,3 @@
-use std::path::Path;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -62,19 +61,22 @@ pub async fn transcribe_audio(
     )
     .map_err(|e| e.to_string())?;
 
-    let sidecar_dir = find_sidecar_dir()?;
-    let python_bin = sidecar_dir.join(".venv").join("bin").join("python3");
-    let script = sidecar_dir.join("diarize.py");
+    let python_bin = crate::sidecar::python::python_executable(&app)?;
+    let script = crate::sidecar::python::script_dir(&app)?.join("diarize.py");
 
     if !python_bin.exists() {
-        return Err(
-            "Python environment not set up. Please run setup from Settings.".to_string(),
-        );
+        return Err(if cfg!(debug_assertions) {
+            "Python environment not set up. Please run setup from Settings.".to_string()
+        } else {
+            "The bundled Python runtime is missing. Please reinstall Tracet.".to_string()
+        });
     }
 
     // Spawn the whisperX sidecar
-    let mut child = Command::new(python_bin.to_str().unwrap())
-        .arg(script.to_str().unwrap())
+    let mut cmd = Command::new(&python_bin);
+    crate::sidecar::python::sidecar_env(&mut cmd);
+    let mut child = cmd
+        .arg(&script)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -460,15 +462,4 @@ fn simplify_log_message(msg: &str) -> String {
     } else {
         s.to_string()
     }
-}
-
-fn find_sidecar_dir() -> Result<std::path::PathBuf, String> {
-    let dev_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("sidecar");
-    if dev_path.exists() {
-        return Ok(dev_path);
-    }
-    Err("Could not locate sidecar directory".to_string())
 }

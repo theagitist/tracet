@@ -43,7 +43,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [],
+    "resources": {
+      "../sidecar/diarize.py": "sidecar/diarize.py",
+      "../sidecar/requirements.txt": "sidecar/requirements.txt"
+    },
     "macOS": {
       "entitlements": "entitlements.plist",
       "minimumSystemVersion": "11.0"
