@@ -33,8 +33,8 @@ Everything runs on your machine: no cloud APIs.
 ```mermaid
 flowchart TB
     FE["<b>React + TypeScript + Tailwind CSS frontend</b><br/>Vite, served by Tauri webview"]
-    BE["<b>Rust backend (Tauri v2)</b><br/>Pipeline orchestrator<br/>FFmpeg child process for media conversion<br/>Python sidecar manager<br/>Ollama HTTP client (LLM review)<br/>.tracet zip pack/unpack"]
-    SC["<b>Python sidecar (sidecar/.venv)</b><br/>whisperX (faster-whisper backend)<br/>wav2vec2 phoneme alignment<br/>pyannote speaker diarization"]
+    BE["<b>Rust backend (Tauri v2)</b><br/>Pipeline orchestrator<br/>Python sidecar manager<br/>Ollama HTTP client (LLM review)<br/>.tracet zip pack/unpack"]
+    SC["<b>Python sidecar (bundled Python 3.12 runtime)</b><br/>PyAV media conversion<br/>whisperX (faster-whisper backend)<br/>wav2vec2 phoneme alignment<br/>pyannote speaker diarization"]
 
     FE -- "Tauri IPC" --> BE
     BE -- "stdin/stdout JSON" --> SC
@@ -42,41 +42,49 @@ flowchart TB
 
 ## Requirements
 
-- macOS on Apple Silicon (M1/M2/M3 or later), recommended
-- macOS on Intel (x86_64) is also supported. Intel Macs have no Metal (MPS)
-  acceleration, so alignment and diarization fall back to CPU on top of the
-  already CPU-only transcription. Everything works, but expect noticeably
-  slower processing. Prefer a smaller Whisper model on lower-RAM Intel Macs.
-- Python 3.12 (3.14 is too new for the ML stack at the moment)
-- FFmpeg (auto-installed on first run if Homebrew is available)
+- A Mac with Apple Silicon (M1 or later), macOS 11 or later
+- About 1.3 GB of disk for the app, plus room for the speech model it
+  downloads on first use (about 1.6 GB for the default `large-v3-turbo`)
+- An internet connection the first time each speech model is used
 - Optional: Ollama (https://ollama.ai) for LLM-based accuracy review
+
+Intel Macs are not supported from 0.2.0 on: PyTorch no longer publishes
+Intel macOS builds, and the transcription stack needs a current one.
+
+Nothing else needs installing. The app carries its own Python runtime,
+media decoder and speaker diarization model.
 
 ## Installation
 
 ### From a release DMG
 
-Download the latest [`.dmg` from GitHub Releases](https://github.com/theagitist/tracet/releases/latest),
-picking the build for your Mac:
+Download `Tracet_<version>_aarch64.dmg` from the
+[latest GitHub release](https://github.com/theagitist/tracet/releases/latest),
+open it, and drag the app to Applications. The app is signed and notarized,
+so Gatekeeper opens it without the "unidentified developer" warning.
 
-- `Tracet_<version>_aarch64.dmg` for Apple Silicon (M1/M2/M3 or later)
-- `Tracet_<version>_x64.dmg` for Intel
-
-Drag the app to Applications, and launch. On first run a setup screen
-offers to install the remaining dependencies (FFmpeg, the Python venv,
-whisperX). The app is signed and notarized, so Gatekeeper opens it without
-the "unidentified developer" warning.
+There is no setup step. The first transcription downloads the speech model
+once, with a progress bar; after that Tracet works offline.
 
 ### From source
 
 ```bash
 git clone git@github.com:theagitist/tracet.git
 cd tracet
-npm install
-cargo tauri build
+HF_TOKEN_FILE=~/path/to/hf-token ./build.sh
 ```
 
-The packaged app and `.dmg` end up in
-`src-tauri/target/release/bundle/`.
+`build.sh` builds the app, then `scripts/build-runtime.sh` assembles the
+bundled runtime: a pinned standalone Python 3.12 with the exact package
+versions in `sidecar/requirements.lock`, plus the diarization model. The
+model's HuggingFace repo is gated, so this one build step needs a read token
+from an account that has accepted the
+[model's conditions](https://huggingface.co/pyannote/speaker-diarization-community-1);
+pass it as `HF_TOKEN` or `HF_TOKEN_FILE`. Both downloads are cached in
+`~/Library/Caches/tracet-build/`. Without a `signing.env`, the result is an
+unsigned app in `src-tauri/target/aarch64-apple-darwin/release/bundle/macos/`.
+A bare `cargo tauri build` produces an app without the runtime, which will
+not transcribe.
 
 ## Development
 
@@ -87,6 +95,12 @@ The packaged app and `.dmg` end up in
 `dev.sh` finds the latest installed Node (working around the broken nvm
 lazy-load shim some setups have), installs npm deps if missing, then runs
 `cargo tauri dev` with hot reload.
+
+Debug builds run the sidecar from the repo's `sidecar/` with a dev venv
+(`sidecar/.venv`, Python 3.10 to 3.13, from `sidecar/requirements.txt`; the
+in-app setup screen can create it). They use the bundled diarization model
+from `src-tauri/target/runtime/models/` once `scripts/build-runtime.sh` has
+run.
 
 ## Settings
 
@@ -141,13 +155,14 @@ Things that explicitly do NOT happen:
 If you want to verify any of this, the only outbound HTTP code paths
 are `src-tauri/src/commands/setup.rs` (Ollama health check), and
 `src-tauri/src/commands/review.rs` (Ollama generate call); plus the
-HuggingFace fetches inside the Python sidecar (`sidecar/diarize.py` via
-the whisperX and pyannote libraries).
+model downloads inside the Python sidecar (`sidecar/diarize.py`, through
+faster-whisper and whisperX).
 
 ## Project layout
 
 ```
 .
+├── build.sh                     # Signed + notarized release build
 ├── dev.sh                       # Dev launcher
 ├── index.html                   # Vite entry HTML
 ├── package.json                 # Frontend deps + scripts
@@ -167,10 +182,15 @@ the whisperX and pyannote libraries).
 │       ├── commands/            # Tauri commands (one file per concern)
 │       ├── pipeline/            # End-to-end orchestrator
 │       ├── models/              # Transcript / Speaker / config structs
-│       └── sidecar/             # Python venv + FFmpeg helpers
+│       └── sidecar/             # Locates the bundled (or dev) Python
+├── scripts/
+│   └── build-runtime.sh         # Bundled Python runtime + diarization model
 ├── sidecar/                     # Python sidecar
 │   ├── diarize.py               # whisperX entry point
-│   └── requirements.txt
+│   ├── convert.py               # Any media to 16 kHz mono WAV (PyAV)
+│   ├── audio_io.py              # Shared decoding helpers
+│   ├── requirements.txt         # Dev venv
+│   └── requirements.lock        # Exact versions shipped in releases
 └── test-audio/                  # Generated test files for QA
     ├── short-single.wav         # 4.7s, single voice
     ├── short-multi.wav          # 12.7s, two voices alternating
