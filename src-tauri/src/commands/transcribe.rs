@@ -74,7 +74,7 @@ pub async fn transcribe_audio(
 
     // Spawn the whisperX sidecar
     let mut cmd = Command::new(&python_bin);
-    crate::sidecar::python::sidecar_env(&mut cmd);
+    crate::sidecar::python::sidecar_env(&app, &mut cmd);
     let mut child = cmd
         .arg(&script)
         .stdin(std::process::Stdio::piped())

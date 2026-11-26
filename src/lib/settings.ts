@@ -3,7 +3,6 @@
 // and useTranscription (reader).
 
 export interface UserSettings {
-  hfToken: string;
   whisperModel: string;
   ollamaModel: string;
   ollamaUrl: string;
@@ -13,7 +12,6 @@ export interface UserSettings {
 const KEY = "tracet:settings";
 
 const DEFAULTS: UserSettings = {
-  hfToken: "",
   whisperModel: "large-v3-turbo",
   ollamaModel: "llama3.1:8b",
   ollamaUrl: "http://localhost:11434",
@@ -24,7 +22,10 @@ export function loadSettings(): UserSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULTS };
-    const parsed = JSON.parse(raw);
+    // Up to 0.1.x the HuggingFace token was stored here in plain text. The
+    // diarization model now ships with the app, so erase it from storage.
+    const { hfToken, ...parsed } = JSON.parse(raw);
+    if (hfToken !== undefined) localStorage.setItem(KEY, JSON.stringify(parsed));
     return { ...DEFAULTS, ...parsed };
   } catch {
     return { ...DEFAULTS };

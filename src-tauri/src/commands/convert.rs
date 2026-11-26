@@ -32,7 +32,7 @@ pub async fn convert_media(app: AppHandle, input_path: String) -> Result<String,
         .join("audio.wav");
 
     let mut cmd = Command::new(python::python_executable(&app)?);
-    python::sidecar_env(&mut cmd);
+    python::sidecar_env(&app, &mut cmd);
     let mut child = cmd
         .arg(python::script_dir(&app)?.join("convert.py"))
         .arg(&input_path)

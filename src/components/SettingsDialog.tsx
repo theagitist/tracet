@@ -47,7 +47,6 @@ export function SettingsDialog({ onClose }: Props) {
   const [profiles, setProfiles] = useState<ModelProfile[]>([]);
   const [selectedWhisper, setSelectedWhisper] = useState(initial.whisperModel);
   const [selectedOllama, setSelectedOllama] = useState(initial.ollamaModel);
-  const [hfToken, setHfToken] = useState(initial.hfToken);
   const [ollamaUrl, setOllamaUrl] = useState(initial.ollamaUrl);
   const [ollamaUrlDraft, setOllamaUrlDraft] = useState(initial.ollamaUrl);
   const [remoteConfirmText, setRemoteConfirmText] = useState("");
@@ -63,11 +62,10 @@ export function SettingsDialog({ onClose }: Props) {
     saveSettings({
       whisperModel: selectedWhisper,
       ollamaModel: selectedOllama,
-      hfToken,
       ollamaUrl,
       enableLlmReview,
     });
-  }, [selectedWhisper, selectedOllama, hfToken, ollamaUrl, enableLlmReview]);
+  }, [selectedWhisper, selectedOllama, ollamaUrl, enableLlmReview]);
 
   // The Ollama URL is the only setting that can leak transcript text off the
   // machine. Only commit the draft to the active value when it's local, or
@@ -236,24 +234,6 @@ export function SettingsDialog({ onClose }: Props) {
           </div>
         </section>
 
-        {/* HuggingFace Token */}
-        <section className="mb-5">
-          <h3 className="mb-1 text-sm font-medium text-[var(--color-text)]">
-            HuggingFace Token
-          </h3>
-          <p className="mb-2 text-xs text-[var(--color-text-muted)]">
-            Required for speaker identification. Without it, transcription works
-            but all speech is attributed to one speaker.
-          </p>
-          <input
-            type="password"
-            value={hfToken}
-            onChange={(e) => setHfToken(e.target.value)}
-            placeholder="hf_..."
-            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none focus:border-[var(--color-accent)]"
-          />
-        </section>
-
         {/* Ollama LLM review */}
         <section className="mb-5">
           <div className="mb-1 flex items-center justify-between">
@@ -383,8 +363,12 @@ export function SettingsDialog({ onClose }: Props) {
           </div>
         </section>
 
-        {/* Actions */}
-        <div className="flex justify-end">
+        {/* Actions. The credit is required by the model's CC BY 4.0 licence. */}
+        <div className="flex items-end justify-between gap-4">
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Speaker identification uses pyannote/speaker-diarization-community-1
+            by pyannoteAI, licensed under CC BY 4.0.
+          </p>
           <button
             onClick={onClose}
             className="rounded bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-hover)]"

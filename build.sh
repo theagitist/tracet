@@ -64,6 +64,10 @@ if [ -f signing.env ]; then
     if [ -n "${APPLE_API_KEY_PATH:-}" ] && [ -n "${APPLE_API_KEY:-}" ] && [ -n "${APPLE_API_ISSUER:-}" ]; then
         NOTARIZE=1
     fi
+    # build-runtime.sh needs a HuggingFace token once, to fetch the gated
+    # diarization model into its cache; signing.env may provide it.
+    [ -n "${HF_TOKEN:-}" ] && export HF_TOKEN
+    [ -n "${HF_TOKEN_FILE:-}" ] && export HF_TOKEN_FILE
     # Hide signing vars from Tauri so it produces an UNSIGNED bundle.
     unset APPLE_SIGNING_IDENTITY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
 fi
@@ -81,10 +85,12 @@ APP="src-tauri/target/$TRIPLE/release/bundle/macos/Tracet.app"
 echo "==> Building bundled Python runtime"
 scripts/build-runtime.sh
 RUNTIME="$SCRIPT_DIR/src-tauri/target/runtime/python"
+MODELS="$SCRIPT_DIR/src-tauri/target/runtime/models"
 
 if [ -z "$SIGN_ID" ]; then
-    rm -rf "$APP/Contents/Resources/python"
+    rm -rf "$APP/Contents/Resources/python" "$APP/Contents/Resources/models"
     cp -c -R "$RUNTIME" "$APP/Contents/Resources/python"
+    cp -c -R "$MODELS" "$APP/Contents/Resources/models"
     echo "No signing identity in signing.env; leaving unsigned bundle at $APP"
     exit 0
 fi
@@ -96,8 +102,9 @@ echo "==> Signing in non-synced work dir: $WORK"
 
 cp -R "$APP" "$WORK/Tracet.app"
 SAPP="$WORK/Tracet.app"
-rm -rf "$SAPP/Contents/Resources/python"
+rm -rf "$SAPP/Contents/Resources/python" "$SAPP/Contents/Resources/models"
 cp -c -R "$RUNTIME" "$SAPP/Contents/Resources/python"
+cp -c -R "$MODELS" "$SAPP/Contents/Resources/models"
 xattr -cr "$SAPP"
 
 # Sign inside out instead of --deep: --deep does not treat the hundreds of

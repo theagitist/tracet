@@ -52,14 +52,29 @@ pub fn is_runtime_ready(app: &AppHandle) -> bool {
     python_executable(app).map(|p| p.exists()).unwrap_or(false)
 }
 
+/// The bundled pyannote diarization pipeline (scripts/build-runtime.sh).
+/// Debug builds use the copy in the runtime build dir when it exists.
+fn diarization_model_dir(app: &AppHandle) -> Option<PathBuf> {
+    let models = if cfg!(debug_assertions) {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/runtime/models")
+    } else {
+        app.path().resource_dir().ok()?.join("models")
+    };
+    let dir = models.join("pyannote-speaker-diarization-community-1");
+    dir.join("config.yaml").exists().then_some(dir)
+}
+
 /// Environment for the sidecar. The bundled runtime must not pick up the
 /// user's own Python setup, and must not try to write `__pycache__` into the
 /// signed, read-only bundle.
-pub fn sidecar_env(cmd: &mut Command) {
+pub fn sidecar_env(app: &AppHandle, cmd: &mut Command) {
     cmd.env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME")
         .env("PYTHONNOUSERSITE", "1")
         .env("PYTHONDONTWRITEBYTECODE", "1");
+    if let Some(dir) = diarization_model_dir(app) {
+        cmd.env("TRACET_DIARIZATION_MODEL", dir);
+    }
 }
 
 /// Find an interpreter the ML stack supports. whisperX needs 3.10 to 3.13

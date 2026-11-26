@@ -50,9 +50,6 @@ flowchart TB
 - Python 3.12 (3.14 is too new for the ML stack at the moment)
 - FFmpeg (auto-installed on first run if Homebrew is available)
 - Optional: Ollama (https://ollama.ai) for LLM-based accuracy review
-- Optional: HuggingFace account and access token for speaker diarization.
-  You will also need to accept the `pyannote/speaker-diarization-3.1`
-  license. Tokens are issued at https://huggingface.co/settings/tokens.
 
 ## Installation
 
@@ -93,10 +90,8 @@ lazy-load shim some setups have), installs npm deps if missing, then runs
 
 ## Settings
 
-A HuggingFace token is required for speaker diarization. Without it,
-transcription still works but every utterance is attributed to a single
-speaker. Set the token via Settings → HuggingFace Token; it persists in
-localStorage.
+Speaker diarization works out of the box: the pyannote model ships inside
+the app, so no HuggingFace account or token is needed.
 
 For LLM-based review, install Ollama and pull a model:
 
@@ -114,22 +109,15 @@ Tracet is privacy-first by design. Audio files, transcripts, and saved
 telemetry, no analytics, no crash reporting, and no auto-updater. The
 app does not phone home.
 
-There are exactly three places where the app makes network requests:
+There are exactly two places where the app makes network requests:
 
-1. **Model downloads on first run.** whisperX and pyannote download their
-   model weights from HuggingFace and the Torch Hub the first time you
-   transcribe. These are one-way downloads (no audio or transcript data
-   is sent), and once cached at `~/.cache/huggingface/hub/` and
-   `~/.cache/torch/hub/checkpoints/`, transcription works fully offline.
-2. **HuggingFace token use.** If you set a HuggingFace token to enable
-   speaker diarization, that token is sent to `huggingface.co` solely to
-   authenticate the pyannote model download. It is not transmitted to
-   any other endpoint. The token is stored as plain text in your
-   browser's `localStorage` (under the key `tracet:settings`) and is
-   readable by anything with access to your user account on this
-   machine. Treat it like a low-stakes credential and do not share the
-   `tracet:settings` value.
-3. **Ollama LLM review (optional, local by default).** When LLM review is
+1. **Whisper model download on first run.** The speech recognition and
+   word-alignment weights are downloaded from HuggingFace and the Torch Hub
+   the first time you transcribe. These are one-way downloads (no audio or
+   transcript data is sent, and no account or token is used), and once
+   cached, transcription works fully offline. The speaker diarization model
+   ships inside the app, so it needs no download at all.
+2. **Ollama LLM review (optional, local by default).** When LLM review is
    enabled, transcript text is sent to whatever URL the **Ollama URL**
    setting points at. The default is `http://localhost:11434`, so the
    data stays on this machine. If you change that URL to a non-local
@@ -196,11 +184,16 @@ Tracet wires together excellent open-source work:
 - [whisperX](https://github.com/m-bain/whisperX): transcription + alignment
 - [pyannote-audio](https://github.com/pyannote/pyannote-audio): speaker
   diarization
+- [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1)
+  by pyannoteAI: the speaker diarization model, redistributed unmodified
+  inside the app under
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper): CTranslate2
   Whisper backend
 - [Ollama](https://ollama.ai): local LLM runtime
 - [Tauri](https://tauri.app): desktop shell
-- [FFmpeg](https://ffmpeg.org)
+- [PyAV](https://github.com/PyAV-Org/PyAV) and [FFmpeg](https://ffmpeg.org):
+  media decoding
 
 ## License
 

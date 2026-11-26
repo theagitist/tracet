@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open, save, ask } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useTranscriptStore } from "../stores/transcriptStore";
 import { loadSettings } from "../lib/settings";
@@ -42,21 +42,6 @@ export function useTranscription() {
 
     const settings = loadSettings();
 
-    // Warn upfront if speaker identification will be skipped, so the user
-    // doesn't discover it 88% into a long transcription.
-    if (!settings.hfToken.trim()) {
-      const proceed = await ask(
-        "No HuggingFace token is set, so speaker identification will be skipped: all speech will be attributed to one speaker.\n\nYou can set a token in Settings → HuggingFace Token.\n\nProceed without speaker identification?",
-        {
-          title: "Speaker identification disabled",
-          kind: "warning",
-          okLabel: "Proceed",
-          cancelLabel: "Cancel",
-        }
-      );
-      if (!proceed) return;
-    }
-
     store.reset();
     store.setSourceFilePath(filePath);
 
@@ -74,7 +59,8 @@ export function useTranscription() {
         enable_llm_review: settings.enableLlmReview,
         language: null,
         confidence_threshold: 0.7,
-        hf_token: settings.hfToken.trim() || null,
+        // The diarization model ships with the app; no token needed.
+        hf_token: null,
         ollama_model: settings.ollamaModel,
         ollama_url: settings.ollamaUrl,
       };

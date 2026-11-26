@@ -74,5 +74,49 @@ echo "==> Precompiling bytecode"
 find "$OUT/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 "$PY" -m compileall -q -j 0 "$OUT/python/lib" >/dev/null || true
 
+# Speaker diarization model, shipped so users never need a HuggingFace token.
+# pyannote/speaker-diarization-community-1 is CC-BY-4.0 (redistribution with
+# attribution); the HF repo is gated, so only this build step needs a token
+# (HF_TOKEN, or HF_TOKEN_FILE pointing at a file holding one).
+DIAR_REPO="pyannote/speaker-diarization-community-1"
+DIAR_REV="3533c8cf8e369892e6b79ff1bf80f7b0286a54ee"
+DIAR_CACHE="$CACHE/models/speaker-diarization-community-1-$DIAR_REV"
+if [ ! -f "$DIAR_CACHE/config.yaml" ]; then
+    echo "==> Downloading $DIAR_REPO@${DIAR_REV:0:8}"
+    if [ -z "${HF_TOKEN:-}" ] && [ -n "${HF_TOKEN_FILE:-}" ]; then
+        HF_TOKEN="$(tr -d '[:space:]' < "${HF_TOKEN_FILE/#\~/$HOME}")"
+    fi
+    if [ -z "${HF_TOKEN:-}" ]; then
+        echo "ERROR: set HF_TOKEN or HF_TOKEN_FILE (a read token with the $DIAR_REPO conditions accepted)" >&2
+        exit 1
+    fi
+    rm -rf "$DIAR_CACHE.part"
+    HF_TOKEN="$HF_TOKEN" PYTHONNOUSERSITE=1 "$PY" - "$DIAR_REPO" "$DIAR_REV" "$DIAR_CACHE.part" <<'PYEOF'
+import os, sys
+from huggingface_hub import snapshot_download
+repo, rev, dest = sys.argv[1:4]
+snapshot_download(repo, revision=rev, local_dir=dest, token=os.environ["HF_TOKEN"])
+PYEOF
+    rm -rf "$DIAR_CACHE.part/.cache"
+    mv "$DIAR_CACHE.part" "$DIAR_CACHE"
+fi
+DIAR_OUT="$OUT/models/pyannote-speaker-diarization-community-1"
+mkdir -p "$OUT/models"
+cp -R "$DIAR_CACHE" "$DIAR_OUT"
+cat > "$DIAR_OUT/ATTRIBUTION.txt" <<EOF
+pyannote/speaker-diarization-community-1 (revision $DIAR_REV)
+by pyannoteAI, https://huggingface.co/$DIAR_REPO
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+Redistributed unmodified with Tracet.
+EOF
+# Offline smoke test: the bundled copy must diarize without a token.
+PYTHONNOUSERSITE=1 HF_HUB_OFFLINE=1 "$PY" - "$DIAR_OUT" <<'PYEOF'
+import sys, warnings
+warnings.filterwarnings("ignore")
+from whisperx.diarize import DiarizationPipeline
+DiarizationPipeline(model_name=sys.argv[1], token=None, device="cpu")
+PYEOF
+
 echo "$STAMP" > "$OUT/.stamp"
 echo "Runtime ready: $OUT ($(du -sh "$OUT/python" | cut -f1))"

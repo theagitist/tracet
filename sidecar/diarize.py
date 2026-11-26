@@ -198,7 +198,14 @@ def run_transcription(
     progress(80, "Alignment complete")
 
     unique_speakers = set()
-    if hf_token:
+    # Release builds ship pyannote/speaker-diarization-community-1 (CC-BY-4.0)
+    # and point us at it, so no HuggingFace token is needed. Without it (a dev
+    # setup that hasn't run scripts/build-runtime.sh) a token still works.
+    model_dir = os.environ.get("TRACET_DIARIZATION_MODEL")
+    if model_dir and not os.path.isdir(model_dir):
+        sys.stderr.write(f"Bundled diarization model missing at {model_dir}\n")
+        model_dir = None
+    if model_dir or hf_token:
         try:
             progress(82, "Identifying speakers (diarization)")
             start_heartbeat(82, "Identifying speakers")
@@ -206,10 +213,15 @@ def run_transcription(
             # use_auth_token to token; existing venvs may still be older.
             from whisperx.diarize import DiarizationPipeline
 
-            try:
-                diarize_model = DiarizationPipeline(token=hf_token, device=torch_device)
-            except TypeError:
-                diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=torch_device)
+            if model_dir:
+                diarize_model = DiarizationPipeline(
+                    model_name=model_dir, token=None, device=torch_device
+                )
+            else:
+                try:
+                    diarize_model = DiarizationPipeline(token=hf_token, device=torch_device)
+                except TypeError:
+                    diarize_model = DiarizationPipeline(use_auth_token=hf_token, device=torch_device)
             diarize_segments = diarize_model(audio)
             result = whisperx.assign_word_speakers(diarize_segments, result)
             stop_heartbeat()
