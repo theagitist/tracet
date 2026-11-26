@@ -241,8 +241,10 @@ for code registries like npm). The flow:
    Verify with `xcrun stapler validate <dmg>` and
    `spctl -a -t open --context context:primary-signature <dmg>`.
    If notarization fails, the signed dmg is kept as
-   `..._aarch64.unnotarized.dmg`; resubmit it with `xcrun notarytool submit`
-   and staple, instead of rebuilding.
+   `..._aarch64.unnotarized.dmg`; resubmit it with
+   `scripts/notarize.py <dmg> && xcrun stapler staple <dmg>` (with the
+   `signing.env` variables exported) instead of rebuilding.
+   `SKIP_NOTARIZE=1 ./build.sh` makes a signed test build without uploading.
 5. Tag with an annotated tag: `git tag -a vX.Y.Z -m "Tracet X.Y.Z (...)"`.
 6. Push: `git push origin main && git push origin vX.Y.Z`.
 7. Create the release with the `.dmg` attached:
@@ -271,9 +273,13 @@ deferred effort.
   notary rejects any Mach-O without a hardened-runtime signature and secure
   timestamp. Each is signed individually, then `python3.12` and the app with
   the entitlements, then every nested file is verified.
-- **The notary upload can be very slow** (seen 2026-11-25: 80 to 160 KB/s
-  on one connection while the link did 17.8 Mbps up; `--no-s3-acceleration`
-  did not help). `build.sh` retries the upload three times.
+- **Notarization goes through `scripts/notarize.py`**, not `notarytool
+  submit`: it uses Apple's Notary REST API with a parallel `aws s3 cp`
+  upload (needs the `aws` CLI and `openssl`). notarytool's single-connection
+  upload stalled on the dev machine's home Wi-Fi (80 KB/s on a 17.8 Mbps
+  link). That Wi-Fi's whole uplink to AWS is only ~200 KB/s; the iPhone
+  hotspot does ~7.5 MB/s, so release builds are best notarized from it.
+  Bundled-runtime builds were `Accepted` this way on 2026-11-25.
 - **Why sign in a temp dir:** a file-sync daemon watches this project tree
   and re-adds `com.apple.FinderInfo` (the custom-icon bit) to the `.app`
   within a few seconds of any `xattr` strip. `codesign` rejects bundles
