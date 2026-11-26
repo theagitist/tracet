@@ -18,6 +18,11 @@ import logging
 import os
 import sys
 
+# Download over plain HTTP rather than Xet: Xet reassembles files at the end
+# and reports progress in bursts, so the first-run model download showed no
+# progress for minutes. Must be set before huggingface_hub is imported.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 
 # Marker used to identify our JSON output line. Some libraries (whisperX/pyannote)
 # write log lines to stdout, so we prefix our payload to disambiguate.
@@ -112,6 +117,110 @@ def stop_heartbeat() -> None:
     _heartbeat_thread = None
 
 
+WHISPER_FILES = ["config.json", "preprocessor_config.json", "model.bin", "tokenizer.json", "vocabulary.*"]
+
+
+def ensure_whisper_model(model_size: str) -> None:
+    """Download the whisper model up front, reporting bytes as they arrive.
+
+    whisperX would otherwise download it inside load_model with no progress
+    at all, so a first run (large-v3-turbo is about 1.6 GB) sat on "Loading
+    weights" for many minutes and looked frozen.
+    """
+    import fnmatch
+
+    from faster_whisper.utils import _MODELS, download_model
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    try:
+        download_model(model_size, local_files_only=True)
+        return
+    except Exception:
+        pass
+
+    repo = _MODELS.get(model_size, model_size)
+    total = None
+    try:
+        from huggingface_hub import HfApi
+
+        info = HfApi().model_info(repo, files_metadata=True)
+        total = sum(
+            s.size or 0
+            for s in info.siblings
+            if any(fnmatch.fnmatch(s.rfilename, p) for p in WHISPER_FILES)
+        ) or None
+    except Exception:
+        pass
+
+    blobs = os.path.join(HF_HUB_CACHE, "models--" + repo.replace("/", "--"), "blobs")
+    stop = threading.Event()
+
+    # huggingface_hub reports bytes through one progress-bar factory for both
+    # plain HTTP and Xet downloads (Xet doesn't grow files in blobs/ as it
+    # goes, so watching the folder alone shows almost nothing). Count bytes
+    # there; if a future version drops it, the folder scan below still works.
+    import huggingface_hub.file_download as hf_download
+
+    counted = [0]
+    original_bar = getattr(hf_download, "_get_progress_bar_context", None)
+
+    def counting_bar(**kwargs):
+        bar = original_bar(**kwargs)
+        if hasattr(bar, "update"):
+            counted[0] += kwargs.get("initial") or 0
+            real_update = bar.update
+
+            def update(n=1):
+                counted[0] += n or 0
+                return real_update(n)
+
+            bar.update = update
+        return bar
+
+    if original_bar is not None:
+        hf_download._get_progress_bar_context = counting_bar
+
+    def downloaded_bytes() -> int:
+        size = 0
+        try:
+            for name in os.listdir(blobs):
+                try:
+                    size += os.path.getsize(os.path.join(blobs, name))
+                except OSError:
+                    pass  # renamed from .incomplete mid-scan
+        except OSError:
+            pass
+        return max(size, counted[0])
+
+    def watch() -> None:
+        while not stop.wait(1.0):
+            done_mb = downloaded_bytes() / 1e6
+            if total:
+                fraction = min(1.0, done_mb * 1e6 / total)
+                progress(
+                    33 + int(11 * fraction),
+                    f"Downloading speech model (first run only): {done_mb:,.0f} of {total / 1e6:,.0f} MB",
+                )
+            else:
+                progress(33, f"Downloading speech model (first run only): {done_mb:,.0f} MB")
+
+    progress(33, f"Downloading speech model {model_size} (first run only)")
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
+    try:
+        download_model(model_size)
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not download the speech model ({e}). Tracet needs an internet "
+            "connection once, the first time each model is used."
+        ) from e
+    finally:
+        stop.set()
+        watcher.join(timeout=2)
+        if original_bar is not None:
+            hf_download._get_progress_bar_context = original_bar
+
+
 def run_transcription(
     wav_path: str,
     hf_token: str | None,
@@ -126,8 +235,9 @@ def run_transcription(
     import torch
 
     stop_heartbeat()
-    progress(33, f"Loading whisper {model_size} weights into memory")
-    start_heartbeat(33, f"Loading whisper {model_size} weights")
+    ensure_whisper_model(model_size)
+    progress(44, f"Loading whisper {model_size} weights into memory")
+    start_heartbeat(44, f"Loading whisper {model_size} weights")
 
     transcribe_device = "cpu"
     transcribe_compute_type = "int8"
