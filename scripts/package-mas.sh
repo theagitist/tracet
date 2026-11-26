@@ -62,7 +62,13 @@ PLIST="$APP/Contents/Info.plist"
 # Only standard HTTPS (the model download): exempt from export documentation.
 /usr/libexec/PlistBuddy -c 'Add :ITSAppUsesNonExemptEncryption bool false' "$PLIST" 2>/dev/null ||
     /usr/libexec/PlistBuddy -c 'Set :ITSAppUsesNonExemptEncryption false' "$PLIST"
+# The store rejects arm64-only apps whose minimum is below macOS 12 (90869).
+# The .dmg keeps macOS 11.
+/usr/libexec/PlistBuddy -c 'Set :LSMinimumSystemVersion 12.0' "$PLIST"
 cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+# The installer writes the app as root; owner-only files would then be
+# unreadable to the user and fail signature checks (90255).
+chmod -R u+rwX,go+rX,go-w "$APP"
 xattr -cr "$APP"
 
 # Inside out, as in build.sh. No hardened runtime: the App Store doesn't
@@ -72,10 +78,19 @@ MACHO_LIST="$WORK/macho.txt"
 find "$RES/python" -type f \( -name '*.so' -o -name '*.dylib' -o -perm +111 \) -print0 \
     | xargs -0 file --no-pad | grep 'Mach-O' | cut -d: -f1 \
     | sed 's/ (for architecture .*)$//' | sort -u | grep -vxF "$PYEXE" > "$MACHO_LIST"
-echo "==> Signing $(wc -l < "$MACHO_LIST" | tr -d ' ') nested Mach-O files"
-tr '\n' '\0' < "$MACHO_LIST" \
+# Every Mach-O executable (python3.12, and torch's protoc and
+# torch_shm_manager) must carry the sandbox entitlement (90296); libraries
+# get none.
+EXE_LIST="$WORK/exe.txt"
+{ echo "$PYEXE"; tr '\n' '\0' < "$MACHO_LIST" | xargs -0 file --no-pad | grep 'Mach-O.*executable' \
+    | cut -d: -f1 | sed 's/ (for architecture .*)$//' | sort -u; } > "$EXE_LIST"
+LIB_LIST="$WORK/lib.txt"
+grep -vxF -f "$EXE_LIST" "$MACHO_LIST" > "$LIB_LIST"
+echo "==> Signing $(wc -l < "$LIB_LIST" | tr -d ' ') libraries and $(wc -l < "$EXE_LIST" | tr -d ' ') executables"
+tr '\n' '\0' < "$LIB_LIST" \
     | xargs -0 -P 8 -n 25 codesign --force --timestamp --sign "$APPLE_MAS_APP_IDENTITY"
-codesign --force --timestamp --entitlements "$CHILD_ENT" --sign "$APPLE_MAS_APP_IDENTITY" "$PYEXE"
+tr '\n' '\0' < "$EXE_LIST" \
+    | xargs -0 -n 1 codesign --force --timestamp --entitlements "$CHILD_ENT" --sign "$APPLE_MAS_APP_IDENTITY"
 codesign --force --timestamp --entitlements "$APP_ENT" --sign "$APPLE_MAS_APP_IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 BAD=0
@@ -91,6 +106,16 @@ PKG="$OUT_DIR/Tracet-$VERSION.pkg"
 productbuild --component "$APP" /Applications --sign "$APPLE_MAS_INSTALLER_IDENTITY" "$WORK/Tracet.pkg"
 cp "$WORK/Tracet.pkg" "$PKG"
 echo "Package: $PKG"
+
+# Catch the store's sandbox and permission checks before uploading.
+while IFS= read -r f; do
+    codesign -d --entitlements - --xml "$f" 2>/dev/null | grep -q app-sandbox ||
+        { echo "ERROR: executable without the sandbox entitlement: $f" >&2; exit 1; }
+done < "$EXE_LIST"
+if find "$APP" ! -perm -o+r -print | grep -q .; then
+    echo "ERROR: files not readable by all users in the bundle" >&2
+    exit 1
+fi
 
 if [ "${MAS_UPLOAD:-0}" = "1" ]; then
     echo "==> Validating with App Store Connect"
