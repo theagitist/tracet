@@ -217,4 +217,31 @@ Tracet wires together excellent open-source work:
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Tracet's own code is MIT. See [LICENSE](LICENSE).
+
+### Third-party software under the GPL
+
+The 0.2.0 app bundles PyAV 17.0.1, whose prebuilt FFmpeg 8.0.1 libraries
+(`av/.dylibs/` inside `Tracet.app/Contents/Resources/python`) are linked
+with the x264 and x265 video encoders. That FFmpeg build, x264 and x265 are
+licensed under the GNU General Public License, version 2 or later; the
+license text is in [licenses/GPL-2.0.txt](licenses/GPL-2.0.txt). Tracet only
+decodes media and never uses the encoders.
+
+The corresponding source code:
+
+- FFmpeg 8.0.1: <https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz>
+- x264: <https://code.videolan.org/videolan/x264>
+- x265: <https://www.videolan.org/developers/x265.html>
+- The build scripts that produced these binaries (PyAV's FFmpeg build):
+  <https://github.com/PyAV-Org/pyav-ffmpeg>
+
+For three years from the release of a version that includes them, you can
+also request a copy of this source code by opening an issue at
+<https://github.com/theagitist/tracet/issues>.
+
+A later release will ship a decode-only FFmpeg without these encoders.
+
+Other bundled components (Python, PyTorch, whisperX, pyannote and their
+dependencies) keep their own license files inside the app, next to each
+package (`*.dist-info/`).
