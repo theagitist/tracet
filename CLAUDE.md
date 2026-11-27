@@ -255,9 +255,9 @@ a remote tag, however, deletes the associated release.
 
 ## Code signing and notarization
 
-Releases are distributed outside the Mac App Store as signed + notarized
-`.dmg` files (Developer ID). The App Store path (sandboxed) is a separate,
-deferred effort.
+The `.dmg` is distributed outside the Mac App Store, signed + notarized
+(Developer ID). The sandboxed App Store build is described under "Mac App
+Store build" below.
 
 - **Credentials** live in `signing.env` (gitignored, never committed):
   `APPLE_SIGNING_IDENTITY` (the "Developer ID Application: ..." cert common
@@ -309,6 +309,13 @@ deferred effort.
   `APPLE_MAS_INSTALLER_IDENTITY` ("3rd Party Mac Developer Installer: ..."),
   and `MAS_PROVISIONING_PROFILE` (Mac App Store Connect profile for the
   bundle ID); the script checks the profile matches.
+- App Store validation needs every Mach-O executable in the bundle (also
+  torch's `protoc` and `torch_shm_manager`) to carry the sandbox
+  entitlement, all files readable by everyone, and macOS 12 as the minimum
+  for an arm64-only app; `package-mas.sh` handles and checks all three.
+- Listing metadata, screenshots and submission go through the App Store
+  Connect API with a separate App Manager key; see `scripts/asc/README.md`.
+  The upload key in `signing.env` can upload builds but not edit the listing.
 - Sandbox notes: the Python child reads files the user picked (it inherits
   the extension); models and temp files land in the container; never spawn
   system tools (`hardware.rs` uses `sysctlbyname`).
